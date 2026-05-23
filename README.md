@@ -4,7 +4,7 @@ This project implements a reproducible RNA-seq analysis workflow to investigate 
 
 The analysis is based on the experimental design described in 
 
-- [Zhang et al. 2018 Artemisia annua transcriptome study](https://doi.org/10.1016/j.jphotobiol.2014.08.013)
+- [Zhang et al. 2018 Artemisia annua transcriptome study](https://doi.org/10.3390/molecules23061329)
 
 Rather than reproducing the exact computational environment from the original study, this project reimplements the workflow using modern RNA-seq tools and emphasizes modularity, reproducibility, and pipeline organization. 
 
