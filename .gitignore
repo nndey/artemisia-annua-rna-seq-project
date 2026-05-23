@@ -1,0 +1,37 @@
+# data
+raw_data
+trimmed_data/
+
+# sequencing files
+*.fastq
+*.fq
+
+# QC + pipeline outputs
+qc_reports/
+results/
+alignment/
+counts/
+salmon_quant/
+
+# reference genomes
+reference/*.gz
+reference/*.fna
+reference/*.gtf
+reference/*.fai
+reference/seqkit_output/
+
+# logs
+*.log
+logs/
+
+# notebooks junk
+.ipynb_checkpoints/
+
+# misc 
+*.zip
+*.html
+*.tsv
+
+# claude
+.claude/
+
