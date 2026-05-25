@@ -52,7 +52,7 @@ micromamba activate genomics
 ### 2. Download data
 ```bash
 bash scripts/get_fastq_files.sh
-bash scrpts/get_reference_genome.sh
+bash scripts/get_reference_genome.sh
 ```
 
 ### 3. Run pipeline
@@ -88,12 +88,14 @@ bash run_pipeline.sh --steps qc_raw trim qc_trimmed multiqc
 ├── samples.csv      # sample manifest
 ├── pipeline.py      # main runner
 ├── scripts/
+│   ├── setup_environment.sh
 │   ├── get_fastq_files.sh
 │   ├── get_reference_genome.sh
-│   ├── transcript_to_gene_mapping.sh
-│   ├── build_star_index.sh
-│   ├── build_salmon_index.sh
-│   ├── infer_strandedness.sh
+│   ├── subsample.sh
+│   ├── qc_raw.sh
+│   ├── trim.sh
+│   ├── qc_trimmed.sh
+│   ├── multiqc.sh
 │   └── deseq2.R
 ├── raw_data/
 ├── subsampled_data/
