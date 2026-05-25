@@ -1,31 +1,15 @@
 # data
-raw_data
-trimmed_data/
+raw_data/*
+subsampled_data/*
+trimmed_data/*
 
 # sequencing files
 *.fastq
 *.fq
 
-# QC + pipeline outputs
-qc_reports/
-results/
-alignment/
-counts/
-salmon_quant/
-
 # reference genomes
-reference/*.gz
-reference/*.fna
-reference/*.gtf
-reference/*.fai
-reference/seqkit_output/
-
-# logs
-*.log
-logs/
-
-# notebooks junk
-.ipynb_checkpoints/
+reference/*
+reference/seqkit_output/*
 
 # misc 
 *.zip
@@ -35,3 +19,20 @@ logs/
 # claude
 .claude/
 
+# Keep empty directories
+!alignment/.gitkeep
+!counts/.gitkeep
+!logs/.gitkeep
+!qc_reports/.gitkeep
+!qc_reports/fastp/.gitkeep
+!qc_reports/fastqc_raw/.gitkeep
+!qc_reports/fastqc_trimmed/.gitkeep
+!raw_data/.gitkeep
+!reference/.gitkeep
+!results/.gitkeep
+!results/enrichment/.gitkeep
+!results/figures/.gitkeep
+!results/tables/.gitkeep
+!salmon_quant/.gitkeep
+!subsampled_data/.gitkeep
+!trimmed_data/.gitkeep
