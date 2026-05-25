@@ -1,0 +1,16 @@
+sample_id,condition,replicate,r1,r2
+SRR6808226,blue,3,raw_data/SRR6808226_1.fastq,raw_data/SRR6808226_2.fastq
+SRR6808227,blue,1,raw_data/SRR6808227_1.fastq,raw_data/SRR6808227_2.fastq
+SRR6808228,blue,2,raw_data/SRR6808228_1.fastq,raw_data/SRR6808228_2.fastq
+SRR6808229,red,2,raw_data/SRR6808229_1.fastq,raw_data/SRR6808229_2.fastq
+SRR6808230,red,3,raw_data/SRR6808230_1.fastq,raw_data/SRR6808230_2.fastq
+SRR6808231,white,1,raw_data/SRR6808231_1.fastq,raw_data/SRR6808231_2.fastq
+SRR6808232,white,2,raw_data/SRR6808232_1.fastq,raw_data/SRR6808232_2.fastq
+SRR6808233,far_red,2,raw_data/SRR6808233_1.fastq,raw_data/SRR6808233_2.fastq
+SRR6808234,far_red,3,raw_data/SRR6808234_1.fastq,raw_data/SRR6808234_2.fastq
+SRR6808235,dark,3,raw_data/SRR6808235_1.fastq,raw_data/SRR6808235_2.fastq
+SRR6808236,far_red,1,raw_data/SRR6808236_1.fastq,raw_data/SRR6808236_2.fastq
+SRR6808237,dark,1,raw_data/SRR6808237_1.fastq,raw_data/SRR6808237_2.fastq
+SRR6808238,dark,2,raw_data/SRR6808238_1.fastq,raw_data/SRR6808238_2.fastq
+SRR6808239,white,3,raw_data/SRR6808239_1.fastq,raw_data/SRR6808239_2.fastq
+SRR6808240,red,1,raw_data/SRR6808240_1.fastq,raw_data/SRR6808240_2.fastq

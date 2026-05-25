@@ -1,0 +1,82 @@
+# --- Paths ---
+paths:
+  samples:    samples.csv
+  refs:
+    genome:            references/GCA_003112345.1_ASM311234v1_genomic.fna
+    transcriptome:     references/GCA_003112345.1_ASM311234v1_rna_from_genomic.fna      # for salmon
+    gtf:               references/GCA_003112345.1_ASM311234v1_genomic.gtf
+    star_index:        references/star_index/
+    salmon_index:      references/salmon_index/
+  
+  data:
+    raw:               raw_data/
+    subsampled:        subsampled_data/
+    trimmed:           trimmed_data/
+  
+  qc:
+    fastqc_raw:        qc_reports/fastqc_raw/
+    fastqc_trimmed:    qc_reports/fastqc_trimmed/
+    fastp:             qc_reports/fastp/
+  
+  alignment:           alignment/
+  salmon_quant:        salmon_quant/
+  counts:              counts/
+
+  results:
+    tables:            results/tables/
+    figures:           results/figures/
+    enrichment:        results/enrichment/
+  
+  logs:                logs/
+
+# --- Tools ---
+tools:
+  fastqc:              fastqc
+  fastp:               fastp
+  trimmomatic:         trimmomatic
+  star:                STAR
+  samtools:            samtools
+  salmon:              salmon
+  featurecounts:       featureCounts
+  multiqc:             multiqc
+  Rscript:             Rscript
+
+# --- Parameters ---
+params:
+  threads: 8
+
+  subsampling:
+    n_reads: 1000000       # 1M reads for faster dev/testing
+  
+  fastp:
+    min_length: 36
+    qualified_quality: 20
+    unqualified_percent: 40
+    adapters: auto       # fastp auto-detects by default
+  
+  trimmomatic:
+    min_len: 36
+    leading: 3
+    trailing: 3
+    sliding_window: "4:15"
+    adapters: references/adapters/TruSeq3-PE.fa
+  
+  star:
+    out_sam_type: "BAM SortedByCoordinate"
+    out_sam_attributes: "NH HI AS NM"
+    genome_load: NoSharedMemory
+  
+  salmon:
+    lib_type: A          # auto-detect library/strand type
+    validate_mappings: true
+  
+  featurecounts:
+    strand: 0            # confirm with infer_experiment.py on real data
+    feature: exon
+    attribute: gene_id
+  
+  deseq2:
+    design: "~ condition"
+    reference_level: control
+    padj_threshold: 0.05
+    lfc_threshold: 1.0
