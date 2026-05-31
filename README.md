@@ -25,6 +25,19 @@ Rather than reproducing the exact computational environment from the original st
 - **Visualization:** seaborn, IGV
 - **Functional Enrichment:**  ClusterProfiler
 
+## System Requirements
+
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| RAM | 20 GB | 32 GB+ |
+| CPU cores | 4 | 8+ |
+| Disk space | ~50 GB | ~100 GB |
+
+> The *A. annua* genome (GCA_003112345.1) is ~1.79 Gb with 190,477 scaffolds.
+> STAR genome indexing requires ~16-18 GB RAM for this assembly.
+> Users on machines with <20 GB RAM should add `--genomeSAsparseD 2`
+> the STAR parameters in `config.sh` to reduce memory usage.
+
 ## Pipeline Overview
 1. Download RNA-seq data from SRA
 2. Perform quality control (FastQC, MultiQC)
@@ -126,10 +139,10 @@ This pipeline produces:
 
 ## Acknowledgements
 
-This project was developed using publicly available RNA-seq training materials from the KAUST Academy Bioinformatics Specialization Program:
+This project was developed following publicly available RNA-seq training materials from the KAUST Academy Bioinformatics Specialization Program:
 
 [https://bioinfo-kaust.github.io/academy-stage3-2026/index.html](https://bioinfo-kaust.github.io/academy-stage3-2026/index.html)
 
-These materials were used for self-study and provided step-by-step instructional code for RNA-seq analysis. In this project, those components were reorganized and adapted into a modular, script-based pipeline to improve automation, reproducibility, and usability. 
+These materials were used for self-study and provided step-by-step instructional code for RNA-seq analysis. In this project, some of those code instructions were referenced, as needed, when developing this modular, script-based pipeline to aid in improved automation, reproducibility, and usability.
 
 Additional contributions including applying the workflow to a new biological dataset (_Artemisia annua_) and structuring the project as a reproducible research repository. 

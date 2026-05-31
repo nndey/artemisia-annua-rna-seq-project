@@ -11,6 +11,9 @@ trimmed_data/*
 reference/*
 reference/seqkit_output/*
 
+# notebooks
+notebooks/*
+
 # misc 
 *.zip
 *.html
