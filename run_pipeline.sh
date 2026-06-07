@@ -67,7 +67,7 @@ ALL_STEPS=(
     align
     quantify
     tximport
-    count
+    deseq2
     multiqc
 )
 
@@ -452,13 +452,16 @@ if should_run_step "tximport"; then
         "${LOGS_DIR}/tximport/tximport.log"
 fi
 
-# ---- count ----
-# Merge all per-sample Salmon quant.sf files into one counts matrix CSV.
-if should_run_step "count"; then
-    log_info ">>> [count]"
+# ---- deseq2 ----
+# Aggregate all gene-level counts data for differential gene expression analysis
+if should_run_step "deseq2"; then
+    log_info ">>> [deseq2]"
     run_cmd \
-        "bash scripts/count.sh ${SALMON_DIR} ${COUNTS_DIR}" \
-        "${LOGS_DIR}/counts/merge.log"
+        "${RSCRIPT} scripts/deseq2.R \
+            --rds ${COUNTS_DIR}/tximport_object.rds \
+            --samples_csv ${SAMPLES_CSV} \
+            --output_dir ${RESULTS_DIR}" \
+        "${LOGS_DIR}/deseq2/deseq2.log"
 fi
 
 # ---- multiqc ----

@@ -17,7 +17,7 @@ QC_FASTP_DIR="qc_reports/fastp"
 ALIGNMENT_DIR="alignment/"
 SALMON_DIR="salmon_quant"
 COUNTS_DIR="counts/"
-RESULTS_TABLE="results/tables/"
+RESULTS_DIR="results/"
 LOGS_DIR="logs/"
 
 # --- Environment (Tools) ---
