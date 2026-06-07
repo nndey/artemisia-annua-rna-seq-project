@@ -106,10 +106,13 @@ bash run_pipeline.sh --steps qc_raw trim qc_trimmed multiqc
 │   ├── get_reference_genome.sh
 │   ├── subsample.sh
 │   ├── qc_raw.sh
+│   ├── quantify.sh
+│   ├── count.sh
 │   ├── trim.sh
 │   ├── qc_trimmed.sh
-│   ├── multiqc.sh
+│   ├── tximport.R
 │   └── deseq2.R
+│   ├── multiqc.sh
 ├── raw_data/
 ├── subsampled_data/
 ├── trimmed_data/

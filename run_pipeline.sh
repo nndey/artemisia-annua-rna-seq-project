@@ -66,6 +66,7 @@ ALL_STEPS=(
     qc_trimmed
     align
     quantify
+    tximport
     count
     multiqc
 )
@@ -437,6 +438,19 @@ done
 # These run once after all samples are processed.
 # They operate across all samples rather than one at a time.
 # ==============================================================================
+
+# ---- tximport ----
+# Aggregate Salmon transcript-level counts to gene level for DESeq2
+if should_run_step "tximport"; then
+    log_info ">>> [tximport]"
+    run_cmd \
+        "${RSCRIPT} scripts/tximport.R \
+            --salmon_dir ${SALMON_DIR} \
+            --gtf ${REF_GTF} \
+            --samples_csv ${SAMPLES_CSV} \
+            --output_dir ${COUNTS_DIR}" \
+        "${LOGS_DIR}/tximport/tximport.log"
+fi
 
 # ---- count ----
 # Merge all per-sample Salmon quant.sf files into one counts matrix CSV.
