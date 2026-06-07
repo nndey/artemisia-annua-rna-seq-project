@@ -96,10 +96,10 @@ bash run_pipeline.sh --steps qc_raw trim qc_trimmed multiqc
 ## Repository Structure
 ```
 /artemisia-annua-rna-seq-project
-├── config.sh        # main config
-├── config.yaml      # main config (yaml version)
-├── samples.csv      # sample manifest
-├── pipeline.py      # main runner
+├── config.sh            # main config
+├── config.yaml          # main config (yaml version)
+├── samples.csv          # sample manifest
+├── run_pipeline.sh      # main runner script
 ├── scripts/
 │   ├── setup_environment.sh
 │   ├── get_fastq_files.sh
