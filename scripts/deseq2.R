@@ -86,8 +86,8 @@ if (is.null(opt$output_dir)) stop("--output_dir is required")
 # =============================================================================
 
 suppressPackageStartupMessages({
-    library(DESeq2)    # performs differential gene expression analysis
-    library(tximport)  # loads and reads tximport object
+    library(DESeq2)      # performs differential gene expression analysis
+    library(tximport)    # loads and reads tximport object
     library(tidyverse)   # string manipulation
 })
 
