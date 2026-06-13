@@ -56,6 +56,7 @@ To reproduce the workflow analysis:
 ### 1. Setup the environment
 ```bash
 # 1. First time only — set up the environment
+source config.sh
 bash setup_environment.sh
 
 # 2. Every time — activate before running
@@ -68,7 +69,7 @@ bash scripts/get_fastq_files.sh
 bash scripts/get_reference_genome.sh
 ```
 
-### 3. Run pipeline
+### 3. Run pipeline (QC, trim, align, quantify steps only)
 
 ```bash
 # Run everything
@@ -93,6 +94,9 @@ bash run_pipeline.sh --config path/to/config.sh
 bash run_pipeline.sh --steps qc_raw trim qc_trimmed multiqc
 ```
 
+### 4. Analyze results (DESeq2, visualization, and enrichment steps only)
+- Run code cell blocks in the Quarto notebooks provided in the `notebooks/` directory
+
 ## Repository Structure
 ```
 /artemisia-annua-rna-seq-project
@@ -111,8 +115,11 @@ bash run_pipeline.sh --steps qc_raw trim qc_trimmed multiqc
 │   ├── trim.sh
 │   ├── qc_trimmed.sh
 │   ├── tximport.R
-│   └── deseq2.R
 │   ├── multiqc.sh
+├── notebooks/
+│   ├── deseq2.qmd
+│   ├── visualization.qmd
+│   ├── enrichment_analysis.qmd
 ├── raw_data/
 ├── subsampled_data/
 ├── trimmed_data/

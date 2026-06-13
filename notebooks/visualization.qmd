@@ -1,0 +1,429 @@
+---
+title: "Artemisia annua RNA-seq Project: Visualization & QC Plots"
+author: "Nyssa Ndey-Bongo"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: false
+    code-fold: true
+    code-tools: true
+    theme: flatly
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Overview
+
+This notebook creates visualization and QC plots on the data obtained from the differential expression analysis done by DESeq2. 
+
+Analysis code was borrowed from KAUST Academy. 
+
+Source: [https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab5.html](https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab5.html)
+
+**INPUTS:**
+- counts/gene_counts_matrix.tsv           — gene counts matrix
+- results/tables/deseq2_all_results.csv   — all DESeq2 results
+- results/tables/normalized_counts.csv    — normalized counts
+
+**OUTPUTS:**
+- library_sizes.png                              — library size bar chart
+- count_boxplot_distribution.png                 — count distribution boxplot 
+- count_violin_plot_distribution.png             — count distribution violin plot
+- pca_conditions_vs_white.png                    — PCA plot comparing conditions (red, blue, far red) to white light
+- sample_correlation_heatmap.png                 — Sample correlation heatmap
+- MA_plot.png                                    — MA plot (compares log2 Fold Change to Mean Expression)
+- volcano_plot.png                               — Volcano plot
+- top_genes_heatmap.png                          — Heatmap showing significant differentially expressed genes
+- differential_expression_results_summary.txt    — Summary statistics
+
+## Setup
+
+```{python}
+#| label: setup
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+import numpy as np
+import seaborn as sns
+import os
+
+# Set plotting style
+plt.style.use('seaborn-v0_8-whitegrid')
+sns.set_palette("husl")
+
+# Create output directory
+output_dir = os.path.expanduser("../results/figures")
+os.makedirs(output_dir, exist_ok=True)
+
+print("Libraries loaded successfully!")
+```
+
+## Load gene counts data
+
+```{python}
+#| label: load-gene-counts-data
+
+# Load data
+counts = pd.read_csv(os.path.expanduser("../counts/gene_counts_matrix.tsv"), sep="\t", index_col=0)
+
+# Display summary
+print(f"Gene counts matrix: {counts.shape[0]} genes x {counts.shape[1]} samples")
+print(f"Samples: {list(counts.columns)}")
+counts.head()
+```
+
+## Library size bar chart
+
+```{python}
+#| label: library-size-bar-chart
+
+# Library size (total counts per sample)
+fig, ax = plt.subplots(figsize=(10, 6))
+library_sizes = counts.sum()
+colors = ['red' if 'red' in s elif 'blue' if 'blue' in s elif 'dark red' if 'far red' in s else 'green' for s in library_sizes.index]
+ax.bar(library_sizes.index, library_sizes.values / 1e6, color=colors)
+ax.set_ylabel("Total counts (millions)")
+ax.set_title("Library Sizes")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.savefig(f"{output_dir}/library_sizes.png", dpi=150)
+plt.show()
+print(f"Saved to {output_dir}/library_sizes.png")
+```
+
+## Count distribution - boxplot
+
+```{python}
+#| label: count-distribution-boxplot
+
+# Distribution of counts (log scale)
+fig, ax = plt.subplots(figsize=(10, 6))
+log_counts = np.log10(counts + 1)
+
+# Use seaborn to plot
+sns.boxplot(data=log_counts, ax=ax, palette=palette)
+
+ax.set_ylabel("log10(counts + 1)")
+ax.set_title("Count Distribution per Sample")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.savefig(f"{output_dir}/count_boxplot_distribution.png", dpi=150)
+plt.show()
+print(f"Saved to {output_dir}/count_boxplot_distribution.png")
+```
+
+## Count distribution - violin plot
+```{python}
+#| label: count-distribution-violin-plot
+
+# Distribution of counts (log scale)
+fig, ax = plt.subplots(figsize=(10, 6))
+log_counts = np.log10(counts + 1)
+
+# Use seaborn to plot
+sns.violinplot(data=log_counts, ax=ax, palette=palette)
+
+ax.set_ylabel("log10(counts + 1)")
+ax.set_title("Count Distribution per Sample")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.savefig(f"{output_dir}/count_violin_plot_distribution.png", dpi=150)
+plt.show()
+print(f"Saved to {output_dir}/count_violin_plot_distribution.png")
+```
+
+## PCA plot
+```{python}
+#| label: pca-plot
+
+# Filter genes with low counts
+counts_filtered = counts[counts.max(axis=1) >= 3]
+print(f"Genes after filtering: {len(counts_filtered)}")
+
+# Log transform the data
+log_counts = np.log2(counts_filtered + 1)
+
+# Transpose so samples are rows
+data_for_pca = log_counts.T
+
+# Standardize
+scaler = StandardScaler()
+data_scaled = scaler.fit_transform(data_for_pca)
+
+# Perform PCA
+pca = PCA(n_components=4)
+pca_result = pca.fit_transform(data_scaled)
+
+# Create dataframe with results
+pca_df = pd.DataFrame({
+    'PC1': pca_result[:, 0],
+    'PC2': pca_result[:, 1],
+    'PC3': pca_result[:, 2],
+    'PC4': pca_result[:, 3],
+    'Sample': data_for_pca.index,
+    'Condition': ['red' if 'red' in s elif 'blue' if 'blue' in s elif 'far red' if 'far_red' in s else 'white' for s in data_for_pca.index]
+})
+
+# Plot
+fig, ax = plt.subplots(figsize=(10, 8))
+colors = {'red': 'red', 'blue': 'blue', 'far_red': 'dark red', 'green': 'white'}
+
+for condition in ['red', 'blue', 'far_red', 'white']:
+    mask = pca_df['Condition'] == condition
+    ax.scatter(pca_df.loc[mask, 'PC1'], pca_df.loc[mask, 'PC2'], pca_df.loc[mask, 'PC3'], pca_df.loc[mask, 'PC3'], c=colors[condition], label=condition, s=150, edgecolors='black', linewidth=1.5)
+
+# Add sample labels
+for idx, row in pca_df.iterrows():
+    ax.annotate(row['Sample'], (row['PC1'], row['PC2']),
+    xytext=(5, 5), textcoords='offset points', fontsize=10)
+
+ax.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]*100:.1f}% variance)")
+ax.set_xlabel(f"PC2 ({pca.explained_variance_ratio_[0]*100:.1f}% variance)")
+ax.set_xlabel(f"PC3 ({pca.explained_variance_ratio_[0]*100:.1f}% variance)")
+ax.set_xlabel(f"PC4 ({pca.explained_variance_ratio_[0]*100:.1f}% variance)")
+ax.set_title("PCA of Gene Expression: Red vs Blue vs Far Red vs White")
+ax.legend(title="Condition", loc='best')
+ax.axhline(y=0, color='gray', linestyle='--', alpha=0.3)
+ax.axvline(x=0, color='gray', linestyle='--', alpha=0.3)
+
+plt.tight_layout()
+plt.savefig(f"{output_dir}/pca_conditions_vs_white.png", dpi=150)
+plt.show()
+print(f"Saved to {output_dir}/pca_conditions_vs_white.png")
+```
+
+
+## Load DESeq2 results
+```{python}
+#| label: load-deseq2-results
+
+# Load DESeq2 results
+deseq_results = pd.read_csv(
+    os.path.expanduser("../results/tables/deseq2_all_results.csv")
+)
+
+# Load normalized counts
+norm_counts = pd.read_csv(
+    os.path.expanduser("../results/tables/normalized_counts.csv"),
+    index_col='gene_id'
+)
+
+print(f"Total genes in results: {len(deseq_results)}")
+print(f"\nDESeq2 results preview:")
+deseq_results.head()
+```
+
+## Sample correlation heatmap
+```{python}
+#| label: sample-correlation-heatmap
+
+# Sample-to-sample correlation heatmap
+log_counts = np.log2(norm_counts + 1)
+
+# Calculate correlation matrix
+corr_matrix = log_counts.corr()
+
+# Create annotation for conditions
+sample_conditions = ['red' if 'red' in s elif 'blue' if 'blue' in s elif 'far red' if 'far_red' in s else 'white' for s in corr_matrix.columns]
+condition_colors = {'red': 'red', 'blue': 'blue', 'far_red': 'dark red', 'white': 'green'}
+row_colors = [condition_colors[c] for c in sample_conditions]
+
+# Plot clustered heatmap
+g = sns.clustermap(corr_matrix,
+       method='average',
+       cmap='RdYlBu_r',
+       vmin=0.8, vmax=1.0,
+       figsize=(10, 10),
+       row_colors=row_colors,
+       col_colors=row_colors,
+       annot=True,
+       fmt='.3f',
+       linewidths=0.5)
+
+g.fig.suptitle('Sample Correlation Heatmap', y=1.02, fontsize=14)
+
+plt.savefig(f"{output_dir}/sample_correlation_heatmap.png", dpi=150, bbox_inches='tight')
+plt.show()
+print(f"Saved to {output_dir}/sample_correlation_heatmap.png")
+```
+
+# MA plot
+```{python}
+#| label: ma-plot
+
+# MA Plot: log2 Fold Change vs Mean Expression
+fig, ax = plt.subplots(figsize=(10, 8))
+
+df = deseq_results.copy()
+df['significant'] = (df['padj'] < 0.05) & (abs(df['log2FoldChange']) > 1)
+
+# Plot non-significant genes
+ns = df[~df['significant']]
+ax.scatter(np.log10(ns['baseMean'] + 1), ns['log2FoldChange'], c='gray', alpha=0.3, s=10, label='NS')
+
+# Plot significant genes
+sig = df[df['significant']]
+ax.scatter(np.log10(sig['baseMean'] + 1), sig['log2FoldChange'], c='red', alpha=0.6, s=15, label='Significant')
+
+# Add reference lines
+ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+ax.axhline(y=1, color='blue', linestyle='--', linewidth=0.5, alpha=0.5)
+ax.axhline(y=-1, color='blue', linestyle='--', linewidth=0.5, alpha=0.5)
+
+ax.set_xlabel('log10(Mean Expression + 1)', fontsize=12)
+ax.set_ylabel('log2 Fold Change (Conditions/White)', fontsize=12)
+ax.set_title('MA Plot: Conditions vs White Light', fontsize=14)
+ax.legend(loc='upper right')
+ax.set_ylim(-6, 6)
+
+plt.tight_layout()
+plt.savefig(f"{output_dir}/MA_plot.png", dpi=150, bbox_inches='tight')
+plt.show()
+print(f"Saved to {output_dir}/MA_plot.png")
+```
+
+## Volcano plot
+```{python}
+# Volcano Plot: -log10(p-value) vs log2 Fold Change
+fig, ax = plt.subplots(figsize=(10, 8))
+
+df = deseq_results.copy()
+df = df.dropna(subset=['pvalue', 'log2FoldChange'])
+
+# Calculate -log10(pvalue)
+df['neg_log10_pval'] = -np.log10(df['pvalue'])
+
+# Classify genes
+conditions = [
+    (df['padj'] < 0.05) & (df['log2FoldChange'] > 1),  # Up
+    (df['padj'] < 0.05) & (df['log2FoldChange'] < -1), # Down
+]
+choices = ['Upregulated', 'Downregulated']
+df['regulation'] = np.select(conditions, choices, default='Not Significant')
+
+# Define colors 
+colors = {'Upregulated': 'red', 'Downregulated': 'blue', 'Not Significant': 'gray'}
+
+# Plot each category
+for reg, color in colors.items():
+    subset = df[df['regulation'] == reg]
+    alpha = 0.7 if reg != 'Not Significant' else 0.3
+    ax.scatter(subset['log2FoldChange'], subset['neg_log10_pval'], c=color, alpha=alpha, s=15, label=f'{reg} ({len(subset)})')
+
+# Add threshold lines
+ax.axvline(x=1, color='gray', linestyle='--', linewidth=0.8)
+ax.axvline(x=-1, color='gray', linestyle='--', linewidth=0.8)
+ax.axhline(y=-np.log10(0.05), color='gray', linestyle='--', linewidth=0.8)
+
+ax.set_xlabel('log2 Fold Change', fontsize=12)
+ax.set_ylabel('-log10(p-value)', fontsize=12)
+ax.set_title('Volcano Plot: Conditions vs White Light', fontsize=14)
+ax.legend(loc='upper right')
+
+plt.tight_layout()
+plt.savefig(f"{output_dir}/volcano_plot.png", dpi=150, bbox_inches='tight')
+plt.show()
+print(f"Saved to {output_dir}/volcano_plot.png")
+```
+
+## Top DE genes heatmap
+```{python}
+# Heatmap of top DE genes
+sig_genes = deseq_results[
+    (deseq_results['padj'] < 0.05) &
+    (abs(deseq_results['log2FoldChange']) > 1)
+].sort_values('padj')
+
+print(f"Total significant genes: {len(sig_genes)}")
+
+# Select top 30 genes
+n_top = min(30, len(sig_genes))
+top_genes = sig_genes.head(n_top)['gene_id'].tolist()
+
+if len(top_genes) > 0:
+    # Extract counts for top genes
+    top_counts = norm_counts.loc[norm_counts.index.isin(top_genes)]
+
+    # Log transform and Z-score normalize
+    log_top = np.log2(top_counts + 1)
+    z_scores = (log_top.T - log_top.mean(axis=1)) / log_top.std(axis=1)
+    z_scores = z_scores.T
+
+    # Create annotation
+    sample_conditions = ['red' if 'red' in s elif 'blue' if 'blue' in s elif 'far_red' if 'far_red' in s else 'white' for s in z_scores.columns]
+    col_colors = ['red' if c == 'red' elif 'blue' if c == 'blue' elif 'dark red' if c == 'far_red' else 'green' for c in sample_conditions]
+
+    # Plot
+    g = sns.clustermap(z_scores,
+                       method='average',
+                       cmap='RdBu_r',
+                       center=0,
+                       vmin=-2, vmax=2,
+                       figsize=(10, 12),
+                       col_colors=col_colors,
+                       yticklabels=True,
+                       xticklabels=True,
+                       linewidths=0.5)
+
+    g.fig.suptitle(f'Top {n_top} Differentially Expressed Genes (Z-score)', y=1.02, fontsize=14)
+
+    plt.savefig(f"{output_dir}/top_genes_heatmap.png", dpi=150, bbox_inches='tight')
+    plt.show()
+    print(f"Saved to {output_dir}/top_genes_heatmap.png")
+
+else:
+    print("No significant genes found with the current thresholds.")
+```
+
+## Summary statistics
+```{python}
+#| label: summary-stats
+
+# Summary of differential expression results
+df = deseq_results.dropna(subset=['padj'])
+
+# Count genes at different thresholds
+thresholds = [
+    ('padj < 0.1', (df['padj'] < 0.1).sum()),
+    ('padj < 0.05', (df['padj'] < 0.05).sum()),
+    ('padj < 0.01', (df['padj'] < 0.1).sum()),
+    ('padj < 0.05 & |LFC| > 1', ((df['padj'] < 0.05) & abs(df['log2FoldChange'] > 1)).sum()),
+    ('padj < 0.05 & |LFC| > 2', ((df['padj'] < 0.05) & abs(df['log2FoldChange'] > 2)).sum())
+]
+
+print("=" * 50)
+print("Summary of Differential Expression Analysis")
+print("=" * 50)
+print(f"\nTotal genes tested: {len(df)}")
+print(f"\nGenes at different significance thresholds:")
+for desc, count in thresholds:
+    print(f"    {desc}: {count}")
+
+# Up vs Down regulated
+sig = df[(df['padj'] < 0.05) & (abs(df['log2FoldChange']) > 1)]
+up = (sig['log2FoldChange'] < 0).sum()
+down = (sig['log2FoldChange'] < 0).sum()
+print(f"\nAt padj < 0.05 and |LFC| > 1:")
+print(f"  Upregulated in Conditions: {up}")
+print(f"  Downregulated in Conditions: {down}")
+print("=" * 50)
+```
+
+## Notes
+
+### Interpreting the Plots
+
+- **MA Plot:**
+    Shows relationship between expression level and fold change. Red points are significant.
+- **Volcano Plot:**
+    Combines fold change and statistical significance. Top corners contain the most interesting genes.
+- **Correlation Heatmap:**
+    Replicates should correlate highly with each other.
+- **Top Genes Heatmap:**
+    Shows expression patterns of the most significant genes across samples. 

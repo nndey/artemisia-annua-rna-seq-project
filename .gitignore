@@ -11,13 +11,10 @@ trimmed_data/*
 reference/*
 reference/seqkit_output/*
 
-# notebooks
-notebooks/*
-
 # misc 
 *.zip
 *.html
-*.tsv
+*.md
 
 # claude
 .claude/
@@ -39,3 +36,5 @@ notebooks/*
 !salmon_quant/.gitkeep
 !subsampled_data/.gitkeep
 !trimmed_data/.gitkeep
+!raw_data/sra_downloads/.gitkeep
+!raw_data/tmp/.gitkeep

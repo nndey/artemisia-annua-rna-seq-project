@@ -1,0 +1,221 @@
+---
+title: "Artemisia annua RNA-seq Project: Differential Expression Analysis"
+author: "Nyssa Ndey-Bongo"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: false
+    code-fold: true
+    code-tools: true
+    theme: flatly
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Overview
+
+This notebook performs differential expression analysis on the _Artemisia annua_ samples taken from the Zhang et al. 2018. It does so using DESeq2. 
+
+Analysis code was borrowed from KAUST Academy. 
+
+Source: [https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab5.html](https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab5.html)
+
+**INPUTS:**
+- counts/tximport_object.rds       — the tximport object with gene counts
+- samples.csv                      — sample metadata with conditions
+
+**OUTPUTS:**
+- deseq2_all_results.csv      — table of all DESeq2 results (log2FC, p-value)
+- deseq2_results.rds          — the full DESeq2 object for downstream analysis
+- deseq2_significant.csv      — table of all signficant DESeq2 results (log2FC, p-value)
+- normalized_counts.csv       — normalized gene count matrix
+- deseq2_summary.txt          — summary of DESeq2 results (number of DE genes, top hits, etc.)
+
+## Setup
+```{r}
+#| label: setup
+
+library(DESeq2)      # performs differential gene expression analysis
+library(tximport)    # loads and reads tximport object
+library(tidyverse)   # string manipulation
+
+```
+
+
+## Load Data
+```{r}
+#| label: load-data
+
+txi <- readRDS("../counts/tximport_object.rds")
+sample_info <- read.csv("../samples.csv", header = TRUE, sep = ",")
+
+# Set factor levels
+sample_info$condition <- factor(
+    sample_info$condition,
+    levels=c("white", "red", "far_red", "blue")
+)
+
+cat(paste0("Samples: ", nrow(sample_info), "\n"))
+cat(paste0("Genes: ", nrow(txi$counts), "\n"))
+cat(paste0("Conditions: ", paste(levels(sample_info$condition), collapse = " vs "), "\n"))
+```
+
+
+## Pre-Filter
+```{r}
+#| label: pre-filter
+
+# creates a DESeq2 dataset object from tximport data
+dds <- DESeqDataSetFromTximport(
+    txi, 
+    colData = sample_info,   # samples.csv becomes the metadata
+    design = ~condition      # 'condition' is a column in samples.csv
+)
+
+# NOTE: condition is the grouping variable DESeq2 uses for differential
+# expression models. replicate is a useful metadata to have. r1 and r2
+# are ignored by DESeq2, it only cares about non-path columns
+# Batch correction or additional covariates like ~ batch + condition,
+# should be added as columns to samples.csv before running 
+# DESeq2 analysis. 
+
+# Pre-filtering: Remove genes with very low counts
+keep <- rowSums(counts(dds) >= 10) >= 3
+dds <- dds[keep, ]
+cat(paste0("Genes after filtering (>=10 counts in >=3 samples): ", nrow(dds), "\n"))
+```
+
+## Analysis
+```{r}
+#| label: analysis
+
+# Begin running DESeq on the DESeq dataset object
+dds <- DESeq(dds)
+
+# --- Obtain results from desired comparisons ---
+
+# White versus red
+res_wl_vs_red     <- results(
+    dds, contrast = c("condition", "red", "white"), 
+    name = "condition_white_vs_red"
+)
+res_wl_vs_red     <- res_wl_vs_red[order(res_wl_vs_red$padj), ]
+
+summary(res_wl_vs_red)
+
+# White versus blue
+res_wl_vs_blue    <- results(
+    dds,
+    contrast = c("condition", "blue", "white"),
+    name = "condition_white_vs_blue"
+)
+res_wl_vs_blue    <- res_wl_vs_blue[order(res_wl_vs_blue$padj), ]
+
+summary(res_wl_vs_blue)
+
+# White versus far-red
+res_wl_vs_far_red <- results(
+    dds,
+    contrast = c("condition", "far_red", "white"),
+    name = "condition_white_vs_far_red"
+)
+res_wl_vs_far_red <- res_wl_vs_far_red[order(res_wl_vs_far_red$padj), ]
+
+summary(res_wl_vs_far_red)
+
+# Place results into a list
+comparison_list <- list(res_wl_vs_red, res_wl_vs_blue, res_wl_vs_far_red)
+```
+
+## Results
+```{r}
+#| label: results
+
+# Creating empty lists for all results and significant results
+comparison_df_all <- list()
+comparison_df_sig <- list()
+
+# Looping through each comparison to obtain results
+# Places each comparison result as a discrete dataframe
+# Dataframes for each comparison stored in a list
+
+# Log and save all results
+for (i in comparison_list) {
+    result <- as.data.frame(i)
+    results$gene_id <- rownames(result)
+    result <- result[, c("gene_id", "baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj")]
+    append(comparison_df_all, result)
+}
+
+# Log and save significance results
+for (i in comparison_list) {
+    # Significant: padj < 0.05 and |log2FC| > 1
+    sig_genes <- subset(i, padj < 0.05 & abs(log2FoldChange) > 1)
+    sig_genes <- sig_genes[order(sig_genes$padj), ]
+
+    sig_res <- as.data.frame(sig_genes)
+    sig_res$gene_id <- rownames(sig_res)
+    sig_res <- sig_res[, c("gene_id", "baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj")]
+    append(comparison_df_sig, sig_res)
+
+    cat(paste0("Total significant genes: ", nrow(sig_genes), "\n"))
+    cat(paste0("Upregulated in ",  str_extract(i$name, "_*$"), ":", sum(sig_genes$log2FoldChange > 0, na.rm = TRUE), "\n"))
+    cat(paste0("Downregulated in ",str_extract(i$name, "_*$"), ":", sum(sig_genes$log2FoldChange < 0, na.rm = TRUE), "\n"))
+}
+
+# Looping through list of dataframes and appending them as one
+# Write appended dataframe to one single CSV file
+for (df in comparison_df_all) {
+    all_res <- rbind(all_res, df)
+}
+
+for (df in comparison_df_sig) {
+    all_sig <- rbind(all_sig, df)
+}
+
+write.csv(all_res, "../results/tables/deseq2_all_results.csv", row.names = FALSE)
+write.csv(all_sig, "../results/tables/deseq2_significant.csv", row.names = FALSE)
+
+# Normalized counts
+norm_counts <- as.data.frame(counts(dds, normalized = TRUE))
+norm_counts$gene_id <- rownames(norm_counts)
+write.csv(
+    norm_counts,
+    glue("{opt$output_dir}/tables/normalized_counts.csv"),
+    row.names = FALSE
+)
+log_msg(paste("Normalized counts saved to:", glue("{opt$output_dir}/tables")))
+
+# Save DESeq2 object for later use
+saveRDS(dds, glue("{opt$output_dir}/deseq2_object.rds"))
+log_msg(paste("dds object saved to:", opt$output_dir))
+```
+
+
+## Summary
+```{r}
+#| label: summary
+n_genes <- nrow(txi$counts)
+n_samples <- nrow(sample_info)
+
+summary_text <- paste0(
+    "=== DESeq2 import summary ===\n",
+    "Samples        : ", n_samples,    "\n",
+    "Genes          : ", n_genes,  "\n",
+    "Conditions : ",
+        paste(levels(sample_info$condition),
+        collapse = " vs "), "\n",
+    "========================\n"
+)
+
+cat(summary_text)
+
+# save the summary to a text file
+writeLines(summary_text, "..logs/deseq2_import_summary.txt")
+```

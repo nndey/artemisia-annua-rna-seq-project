@@ -31,7 +31,7 @@
 #    --output_dir    counts/
 #
 # Outputs:
-#   counts/gene_counts_matrix.csv    — gene-level counts matrix (genes × samples)
+#   counts/gene_counts_matrix.tsv    — gene-level counts matrix (genes × samples)
 #   counts/tx2gene.csv               — transcript-to-gene mapping used
 #   counts/tximport_summary.txt      — summary of the import
 # =============================================================================
@@ -293,12 +293,12 @@ log_msg("Saving outputs...")
 # --- Gene counts matrix ---
 # txi$counts is a matrix. We convert it to a data frame and add the 
 # gene IDs as an explicit column (rather than row names) for easier
-# downstream handling in DESeq2 and for readable CSV output.
+# downstream handling in DESeq2 and for readable TSV output.
 counts_df <- as.data.frame(txi$counts) %>%
     tibble::rownames_to_column("gene_id")   # move row names to a column
 
-counts_path <- file.path(opt$output_dir, "gene_counts_matrix.csv")
-write_csv(counts_df, counts_path)
+counts_path <- file.path(opt$output_dir, "gene_counts_matrix.tsv")
+write_tsv(counts_df, counts_path)
 log_msg(paste("Gene counts matrix saved to:", counts_path))
 
 # --- TPM matrix (useful for visualization, not for DESeq2) ---

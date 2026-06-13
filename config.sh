@@ -5,8 +5,11 @@
 # --- Paths ---
 SAMPLES_CSV="samples.csv"
 RAW_DIR="raw_data/"
+SRA_DIR="raw_data/sra_downloads"
+FASTERQ_TEMP="raw_data/tmp/fasterq_temp"
 SUBSAMPLED_DIR="subsampled_data/"
 TRIMMED_DIR="trimmed_data/"
+REF_DIR="references/"
 REF_GENOME="references/GCA_003112345.1_ASM311234v1_genomic.fna"
 REF_TRANSCRIPTOME="references/GCA_003112345.1_ASM311234v1_rna_from_genomic.fna"
 REF_GTF="references/GCA_003112345.1_ASM311234v1_genomic.gtf"
@@ -33,6 +36,8 @@ RSCRIPT="Rscript"
 
 # --- Parameters ---
 THREADS=8
+FASTERQ_THREADS=16
+FASTERQ_MEM=32G
 SUBSAMPLE_n=1000000
 FASTP_MIN_LEN=36
 FASTP_QUAL=20
