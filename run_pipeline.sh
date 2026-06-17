@@ -59,6 +59,7 @@ SAMPLES_FILTER=()      # empty = run all samples
 
 # The ordered list of all valid step names.
 # This order controls the sequence steps to run in — don't rearrange it.
+
 ALL_STEPS=(
     subsample
     qc_raw

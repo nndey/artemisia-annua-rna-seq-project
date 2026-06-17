@@ -38,8 +38,13 @@ Source: [https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab5.html](htt
 - deseq2_summary.txt          — summary of DESeq2 results (number of DE genes, top hits, etc.)
 
 ## Setup
+```{bash}
+conda activate genomics
+```
+
+## Load Packages
 ```{r}
-#| label: setup
+#| label: load-packages
 
 library(DESeq2)      # performs differential gene expression analysis
 library(tximport)    # loads and reads tximport object
@@ -219,3 +224,20 @@ cat(summary_text)
 # save the summary to a text file
 writeLines(summary_text, "..logs/deseq2_import_summary.txt")
 ```
+
+## Notes: 
+
+### Why DESeq2?
+DESeq2 is the gold-standard tool for differential expression analysis because it:
+- Models count data with negative binomial distribution
+- Performs size factor normalization to account for library size differences
+- Uses shrinkage estimators for dispersion and fold changes
+- Properly controls false discovery rate (FDR) with Benjamini-Hochberg correction
+
+### Key Concepts
+| Term | Description |
+|------|-------------|
+| log2 Fold Change | log2(KO/WT) - positive means upregulated in KO |
+| p-value | Probability of observing the difference by change |
+| padj (adjusted p-value) | p-value corrected for multiple testing (FDR) |
+| baseMean | Average normalized count across all samples | 

@@ -1,0 +1,427 @@
+---
+title: "Artemisia annua RNA-seq Project: Functional Enrichment Analysis"
+author: "Nyssa Ndey-Bongo"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: false
+    code-fold: true
+    code-tools: true
+    theme: flatly
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Overview
+
+This notebook performs functional enrichment analysis using the g:Profiler python package on the data obtained from differential expression analysis (as done by DESeq2). Enrichment results are then visualized with bar plots and dot plots to better analyze and understand upregulated, downregulated, and all differentially expressed genes. 
+
+Analysis code and notes were borrowed from KAUST Academy.
+
+Source: [https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab7.html](https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab7.html)
+
+**INPUTS:**
+ results/tables/deseq2_all_results.csv   — all DESeq2 results
+
+**OUTPUTS:**
+- go_all_genes_bar.png           — all DE genes bar chart
+- go_upregulated_bar.png         — upregulated bar chart
+- go_downregulated_bar.png       — downregulated bar chart
+- go_all_genes_dot.png           — all DE genes dot chart
+- kegg_all_bar.png               — all DE genes KEGG bar chart
+- kegg_up_bar.png                — upregulated genes KEGG bar chart
+- kegg_down_bar.png              — downregulated genes KEGG bar chart
+- go_all_significant_genes.tsv   — GO results for all DE genes
+- go_upregulated_genes.tsv       — GO results for upregulated genes
+- go_downregulated_genes.tsv     — GO results for downregulated genes
+- kegg_all_significant_genes.tsv                              — KEGG results for all DE genes
+- kegg_upregulated_genes.tsv     — KEGG results for upregulated genes
+- kegg_downregulated_genes.tsv   — KEGG results for downregulated genes
+- analysis_summary.txt           — Enrichment analysis summary
+
+
+## Setup Conda Environment
+
+```{bash}
+#| label: setup-conda-environment
+
+conda activate genomics
+```
+
+
+## Load DE Results and Prepare Gene Lists
+```{python}
+#| label: import-libraries
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from gprofiler import GProfiler
+import os
+
+print("Libraries loaded successfully!")
+```
+
+```{python}
+#| label: load-deseq2-results
+
+# Load all DE results
+de_results = pd.read_csv('results/tables/deseq2_all_results.csv')
+
+print(f"Total genes in DE results: {len(de_results)}")
+print(f"Columns: {list(de_results.columns)}")
+de_results.head()
+```
+
+```{python}
+#| label: define-sig-thresholds-create-gene-lists
+
+# Significance thresholds
+PADJ_THRESHOLD = 0.05
+LOG2FC_THRESHOLD = 1 # |log2FC| > 1 means >2-fold change
+
+# Filter for significant genes
+sig_genes = de_results[
+  (de_results['padj'] < PADJ_THRESHOLD) &
+  (de_results['log2FoldChange'].abs() > LOG2FC_THRESHOLD)
+].copy()
+
+# Separate upregulated and downregulated genes
+up_genes = sig_genes[sig_genes['log2FoldChange'] > 0]['gene_id'].tolist()
+down_genes = sig_genes[sig_genes['log2FoldChange'] < 0]['gene_id'].tolist()
+all_sig_genes = sig_genes['gene_id'].tolist()
+
+print(f"Significant genes (padj < {PADJ_THRESHOLD}, |log2FC| > {LOG2FC_THRESHOLD}):")
+print(f"  Total: {len(all_sig_genes)}")
+print(f"  Upregulated in condition: {len(up_genes)}")
+print(f"  Downregulated in condition: {len(down_genes)}")
+```
+
+
+## Run GO Enrichment Analysis
+
+```{python}
+#| label: initialize-gprofiler-define-helper
+
+# Initialize g:Profiler
+gp = GProfiler(return_dataframe=True)
+
+def run_enrichment(gene_list, name, sources=['GO:BP', 'GO:MF', 'GO:CC']):
+  """
+  Run g:Profiler enrichment analysis on a gene list.
+
+  Paramters:
+  - gene_list: list of gene IDs
+  - name: description for logging
+  - sources: databases to query (GO:BP, GO:MF, GO:CC, KEGG, REAC, etc.)
+
+  Returns:
+  - DataFrame with enrichment results
+  """
+  if len(gene_list) == 0:
+    print(f"Warning: {name} gene list is empty!")
+    return pd.DataFrame()
+
+  print(f"\nRunning enrichment for {name} ({len(gene_list)} genes)...")
+
+  results = gp.profile(
+    organism='aannua'
+    query=gene_list,
+    sources=sources,
+    user_threshold=0.05, # Significance threshold
+    significance_threshold_method='fdr', # Multiple testing correction
+    no_evidence=False
+  )
+
+  if len(results) > 0:
+    print(f"     Found {len(results)} significant terms")
+  else:
+    print(f"     No significant terms found")
+  
+  return results
+```
+
+```{python}
+#| label: run-go-enrichment
+
+# Run GO enrichment analysis
+go_all = run_enrichment(all_sig_genes, "All significant genes", sources=['GO:BP', 'GO:MF', 'GO:CC'])
+go_up = run_enrichment(up_genes, "Upregulated genes", sources=['GO:BP', 'GO:MF', 'GO:CC'])
+go_down = run_enrichment(down_genes, "Downregulated genes", sources=['GO:BP', 'GO:MF', 'GO:CC'])
+```
+
+```{python}
+#| label: explore-go-results
+
+# View columns in results
+if len(go_all) > 0:
+  print("Columns in enrichment results:")
+  print(go_all.columns.tolist())
+  print("\nTop 10 GO terms for all significant genes:")
+  display(go_all[['source', 'native', 'name', 'p_value', 'intersection_size']].head(10))
+```
+
+
+## Run KEGG Pathway Analysis
+
+```{python}
+#| label: run-kegg-pathway-analysis
+
+# Run KEGG pathway enrichment
+kegg_all = run_enrichment(all_sig_genes, "All significant genes (KEGG)", sources=['KEGG'])
+kegg_up = run_enrichment(up_genes, "Upregulated genes (KEGG)", sources=['KEGG'])
+kegg_down = run_enrichment(down_genes, "Downregulated genes (KEGG)", sources=['KEGG'])
+```
+
+```{python}
+#| label: display-kegg-results
+
+# Display KEGG results
+if len(kegg_all) > 0:
+  print("Top KEGG pathways for all significant genes:")
+  display(kegg_all[['native', 'name', 'p_value', 'intersection_size']].head(10))
+else:
+  print("No significant KEGG pathways found for all genes")
+```
+
+## Visualize Enrichment Results
+
+```{python}
+#| label: define-plotting-functions
+
+# Enrichment bar plot
+def plot_enrichment_bar(results, title, top_n=15, figsize=(10,8)):
+  """
+  Create a bar plto of top enriched terms.
+  """
+  if len(results) == 0:
+    print(f"No results to plot for: {title}")
+    return None
+  
+  # Get top N results
+  plot_data = results.head(top_n).copy()
+  plot_data = plot_data.sort_values('p_value', ascending=True)
+
+  # Create -log10(p-value) for better visualization
+  plot_data['-log10(p)'] = -np.log10(plot_data['p_value'])
+
+  # Create figure
+  fig, ax = plt.subplots(figsize=figsize)
+
+  # Color by source (GO:BP, GO:MF, GO:CC, KEGG)
+  colors = {'GO:BP': '#1f77b4', 'GO:MF':'#ff7f0e', 'GO:CC':'#2ca02c', 'KEGG':'#d62728'}
+  bar_colors = [colors.get(s, '#7f7f7f' for s in plot_data['source'])]
+
+  # Create horizontal bar plot
+  bars = ax.barh(range(len(plot_data)), plot_data['-log10(p)'], color=bar_colors)
+
+  # Customize plot
+  ax.set_yticks(range(len(plot_data)))
+  ax.set_yticklabels(plot_data['name'], fontsize=9)
+  ax.set_xlabel('-log10(p-value)', fontsize=12)
+  ax.set_# plots / outputtitle(title, fontsize=14, fontweight='bold')
+
+  # Add gene count labels
+  for i, (bar, count) in enumerate(zip(bars, plot_data['intersection_size'])):
+    ax.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height()/2,
+            f'n={count}', va='center', fontsize=8)
+
+  # Add legend
+  from matplotlib.patches import Patch
+  legend_elements = [Patch(facecolor=c, label=s) for s, c in colors.items() if s in plot_data['source'].values]
+  if legend_elements:
+    ax.legend(handles=legend_elements, loc='lower right')
+  
+  plt.tight_layout()
+  return fig
+
+# Enrichment dot plot
+  def plot_enrichment_dot(results, title, top_n=15, figsize=(10, 8)):
+    """
+    Create a dot plot of top enriched terms (similar to clusterProfiler style).
+    """
+    if len(results) == 0:
+      print(f"No results to plot for: {title}")
+      return None
+    
+    plot_data = results.head(top_n).copy()
+
+    # Calculate gene ratio
+    plot_data['GeneRatio'] = plot_data['intersection_size'] / plot_data['query_size']
+    plot_data['-log10(p)'] = -np.log10(plot_data['p_value'])
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    scatter = ax.scatter(
+      plot_data['GeneRatio'],
+      range(len(plot_data)),
+      s=plot_data['intersection_size'] * 10, # Size by gene count
+      c=plot_data['-log10(p)'], # Color by significance
+      cmap='viridis',
+      alpha=0.7,
+      edgecolors='black',
+      linewidths=0.5
+    )
+
+    ax.set_yticks(range(len(plot_data)))
+    ax.set_yticklabels(plot_data['name'], fontsize=9)
+    ax.set_xlabel('Gene Ratio', fontsize=12)
+    ax.set_title(title, fontsize=14, fontweight='bold')
+
+    # Add colorbar
+    cbar = plt.colorbar(scatter, ax=ax, label='-log10(p-value)')
+
+    # Add size legend
+    sizes = [5, 10, 20]
+    for size in sizes:
+      ax.scatter([], [], s=size*10, c='gray', alpha=0.7, label=f'{size} genes')
+    ax.legend(loc='lower right', title='Gene Count')
+
+    plt.tight_layout()
+    return fig
+```
+
+```{python}
+#| label: plot-go-enrichment
+
+# Plot GO enrichment - All significant genes
+fig = plot_enrichment_bar(go_all, 'GO Enrichment - All Significant DE Genes')
+if fig: 
+  fig.savefig('results/enrichment/go_all_genes_bar.png', dpi=150, bbox_inches='tight')
+  plt.show()
+
+# Plot GO enrichment - Upregulated genes
+fig = plot_enrichment_bar(go_up, 'GO Enrichment - Upregulated in Condition')
+if fig: 
+  fig.savefig('results/enrichment/go_upregulated_bar.png', dpi=150, bbox_inches='tight')
+  plt.show()
+
+# Plot GO enrichment - Downregulated genes
+fig = plot_enrichment_bar(go_down, 'GO Enrichment - Downregulated in Condition')
+if fig:
+  fig.savefig('results/enrichment/go_downregulated_bar.png', dpi=150, bbox_inches='tight')
+  plt.show()
+```
+
+```{python}
+#| label: create-dot-plots-publication
+
+# Create dot plots (publication-style)
+fig = plot_enrichment_dot(go_all, 'GO Enrichment - All DE Genes (Dot Plot)')
+if fig: 
+  fig.savefig('results/enrichment/go_all_genes_dot.png', dpi=150, bbox_inches='tight')
+  plt.show()
+```
+
+```{python}
+#| label: plot-kegg-pathways
+
+# Plot KEGG pathways for all gene sets
+for results, name, filename in [
+  (kegg_all, 'KEGG Pathways - All DE Genes', 'kegg_all'),
+  (kegg_up, 'KEGG Pathways - Upregulated', 'kegg_up'),
+  (kegg_down, 'KEGG Pathways - Downregulated', 'kegg_down')
+]:
+   fig = plot_enrichment_bar(results, name, top_n=10)
+   if fig:
+    fig.savefig(f'results/enrichment/{filename}_bar.png', dpi=150, bbox_inches='tight')
+    plt.show()
+```
+
+## Save Results to TSV Files
+```{python}
+#| label: save-all-enrichment-results
+
+def save_enrichment_results(results, filename):
+  """Save enrichment results to TSV file."""
+  if len(results) === 0:
+    print(f"No results to save for {filename}")
+    return
+  
+  # Select and rename columns for clarity
+  cols_to_save = ['source', 'native', 'name', 'p_value', 'significant', 'term_size', 'query_size', 'intersection_size', 'intersections']
+
+  # Only include columsn that exist
+  cols_to_save = [c for c in cols_to_save if c in results.columns]
+
+  output = results[cols_to_save].copy()
+  output.to_csv(f'results/enrichment/{filename}.tsv', sep='\t', index=False)
+  print(f"Saved: results/enrichment/{filename}.tsv ({len(output)} terms)")
+
+# Save GO results
+save_enrichment_results(go_all, 'go_all_significant_genes')
+save_enrichment_results(go_up, 'go_upregulated_genes')
+save_enrichment_results(go_down, 'go_downregulated_genes')
+
+# Save KEGG results
+save_enrichment_results(kegg_all, 'kegg_all_significant_genes')
+save_enrichment_results(kegg_up, 'kegg_upregulated_genes')
+save_enrichment_results(kegg_down, 'kegg_downregulated_genes')
+
+print("\nAll results saved to results/enrichment")
+```
+
+## Create summary report
+```{python}
+#| label: summary-report
+
+# Create a summary of enrichment analysis
+summary = f"""
+============================================
+Enrichment Analysis Summary
+============================================
+
+Input:
+  Total significant genes: {len(all_sig_genes)}
+  Upregulated genes: {len(up_genes)}
+  Downregulated genes: {len(down_genes)}
+
+Significance thresholds:
+  padj < {PADJ_THRESHOLD}
+  |log2FoldChange| > {LOG2FC_THRESHOLD}
+
+GO Enrichment Results:
+  All genes: {len(go_all)} significant terms
+  Upregulated: {len(go_up)} significant terms
+  Downregulated: {len(go_down)} significant terms
+
+KEGG Pathways Results:
+  All genes: {len(kegg_all)} significant pathways
+  Upregulated: {len(kegg_up)} significant pathways
+  Downregulated: {len(kegg_down)} significant pathways
+
+Output files saved to: results/enrichment/
+============================================
+"""
+print(summary)
+
+# Save summary to file
+with open('results/enrichment/analysis_summary.txt', 'w') as f:
+  f.write(summary)
+```
+
+## Notes
+
+### From Gene Lists to Biological Insight
+
+Enrichment analysis helps answer: **"*What biological processes or pathways are over-represented in my gene list?"**
+
+- **Gene Ontology (GO):** Standardized vocabulary for gene function
+   - Biological Process (BP) - What the gene does
+   - Molecular Function (MF) - How it does it
+   - Cellular Component (CC) - Where it acts
+- **KEGG Pathways:** Biological pathway maps linking genes to cellular processes
+
+### g:Profiler
+g:Profiler is a widely-used tool for functional enrichment analysis. The python package `gprofiler-official` provides programmatic access to the g:Profiler web service.
+
+- Supports multiple organisms and gene ID types
+- Queries GO, KEGG, Reactome, and other databases
+- Returns statistical significance with multiple testing correction
