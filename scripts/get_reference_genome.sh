@@ -10,13 +10,14 @@
 # Prerequisites: 
 #   - Run from the root of the project directory
 # Usage:
-#   bash get_reference_genome.sh             # donwloads reference data to the 
+#   bash scripts/get_reference_genome.sh             # donwloads reference data to the 
 #                                              reference/ directory
 #
 # Code Source: (https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab1.html)
 # ==============================================================================
 
 set -euo pipefail
+source config.sh
 
 # ------------------------------------------------------------------------------
 # Change working directory

@@ -1,5 +1,6 @@
 # data
 raw_data/*
+raw_data/sra_downloads/*
 subsampled_data/*
 trimmed_data/*
 
@@ -38,3 +39,4 @@ reference/seqkit_output/*
 !trimmed_data/.gitkeep
 !raw_data/sra_downloads/.gitkeep
 !raw_data/tmp/.gitkeep
+!logs/subsample/.gitkeep

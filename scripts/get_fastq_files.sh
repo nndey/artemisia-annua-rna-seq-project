@@ -11,11 +11,12 @@
 #   - sra-tools must already be installed
 #   - Run from the root of the project directory
 # Usage:
-#   bash get_fastq_files.sh                  # downloads FASTQ samples to raw_data/
+#   bash scripts/get_fastq_files.sh                  # downloads FASTQ samples to raw_data/
 #                                              directory
 # ==============================================================================
 
 set -euo pipefail 
+source config.sh
 
 
 # ------------------------------------------------------------------------------
@@ -51,7 +52,7 @@ do
     --mem "${FASTERQ_MEM}" \
     --split-files \
     --progress \
-    "${SRA_DIR}/${SraNumbers[$i]}.sra"
+    "${SRA_DIR}/${SraNumbers[$i]}/${SraNumbers[$i]}.sra"
 done
 }
 

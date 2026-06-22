@@ -12,8 +12,8 @@
 #   - Run from the root of the project directory
 #
 # Usage:
-#   bash setup_environment.sh                 # auto-detects conda/mamba/micromamba
-#   bash setup_environment.sh --manager mamba # specify a package manager explicitly
+#   bash scripts/setup_environment.sh                 # auto-detects conda/mamba/micromamba
+#   bash scripts/setup_environment.sh --manager mamba # specify a package manager explicitly
 # ==============================================================================
 
 set -euo pipefail
@@ -98,37 +98,42 @@ echo "Creating environment '${ENV_NAME}'..."
 echo "This may take several minutes."
 echo ""
 
+# --- Python ---
 $MANAGER create \
     --name "$ENV_NAME" \
     --channel bioconda \
     --channel conda-forge \
     --yes \
-    \
-    # --- Python ---
-    python=3.11 \
-    \
-    # ---- QC ----
+    python=3.11
+
+# ---- QC ----
+$MANAGER install -n "$ENV_NAME" --channel bioconda --channel conda-forge --yes \
     fastqc=0.12.1 \
     fastp=1.3.0 \
-    multiqc=1.33 \
-    \
-    # ---- Alignment ----
+    multiqc=1.33
+
+# ---- Alignment ----
+$MANAGER install -n "$ENV_NAME" --channel bioconda --channel conda-forge --yes \
     star=2.7.11b \
-    samtools=1.22.1 \
-    \
-    # ---- Quantification ----
+    samtools=1.22.1
+
+# ---- Quantification ----
+$MANAGER install -n "$ENV_NAME" --channel bioconda --channel conda-forge --yes \
     salmon=1.10.3 \
-    igv=2.19.7 \
-    \
-    # ---- Subsampling ----
-    seqtk \ # TODO: will need to update with version once i remake the environment
-    seqkit=2.13.0 \
-    \
-    # ---- Download tools ----
+    igv=2.19.7
+
+# ---- Subsampling ----
+$MANAGER install -n "$ENV_NAME" --channel bioconda --channel conda-forge --yes \
+    seqtk=1.5.0 \
+    seqkit=2.13.0
+
+# ---- Download tools ----
+$MANAGER install -n "$ENV_NAME" --channel bioconda --channel conda-forge --yes \
     sra-tools=3.2.1 \
-    wget \
-    \
-    # ---- Python analysis libraries ----
+    wget
+
+# ---- Python analysis libraries ----
+$MANAGER install -n "$ENV_NAME" --channel bioconda --channel conda-forge --yes \
     pandas=3.0.1 \
     numpy=2.4.3 \
     matplotlib=3.10.8 \
@@ -136,12 +141,14 @@ $MANAGER create \
     scipy=1.17.1 \
     scikit-learn=1.8.0 \
     openpyxl=3.1.5 \
-    gprofiler-official=1.0.0 \
-    \
-    # ---- R base ----
-    r-base=4.4.3 \
-    \
-    # ---- R analysis packages ----
+    gprofiler-official=1.0.0
+
+# ---- R base ----
+$MANAGER install -n "$ENV_NAME" --channel bioconda --channel conda-forge --yes \
+    r-base=4.4.3
+
+# ---- R analysis packages ----
+$MANAGER install -n "$ENV_NAME" --channel bioconda --channel conda-forge --yes \
     r-tidyverse=2.0.0 \
     r-biocmanager=1.30.27 \
     bioconductor-deseq2=1.46.0 \
@@ -152,15 +159,18 @@ $MANAGER create \
     r-pheatmap=1.0.13 \
     r-ggrepel=0.9.8 \
     r-ggplot2=4.0.2 \
-    r-colorbrewer=1.1.3 \
-    \
-    # ---- Utilities ----
+    r-rcolorbrewer=1.1.3 \
+
+
+# ---- Utilities ----
+$MANAGER install -n "$ENV_NAME" --channel bioconda --channel conda-forge --yes \
     jq \
     yq \
     tree
 
-    echo ""
-    echo "Environment '${ENV_NAME}' created successfully."
+
+echo ""
+echo "Environment '${ENV_NAME}' created successfully."
 
 
 # ------------------------------------------------------------------------------
@@ -194,9 +204,12 @@ check_tool_shell() {
     
     for tool in  "${tools[@]}"; do
         if command -v "$tool" &> /dev/null; then
-          # Run the version command and grab the first line of output.
-          version=$($tool $version_flag 2>&1 | head -1) || version="(version check failed)"
-
+          if [[ "$tool" == "seqkit" ]]; then
+            version=$($tool version 2>&1 | head -1) || version="(version check failed)"
+          else
+            # Run the version command and grab the first line of output.
+            version=$($tool --version 2>&1 | head -1) || version="(version check failed)"
+          fi
           printf "%-20s %s\n" "$tool" "$version"
         else
           printf "%-20s %s\n" "$tool" "NOT FOUND — check installation"
@@ -206,53 +219,16 @@ check_tool_shell() {
 }
 
 check_tool_python() {
-    python -c "
-    import sys
-    packages = {
-        'pandas': 'pd',
-        'numpy': 'np',
-        'matplotlib': 'mpl',
-        'seaborn': 'sns'
-    }
-    for pkg, alias in packages.items():
-        try:
-            __import__(alias)
-            version = getattr(sys.modules[alias], '__version__', 'unknown')
-            print(f'{pkg:20} {version}')
-        except ImportError:
-            print(f'{pkg:20} NOT FOUND — check installation')
-    "
+    python scripts/check_python_libs.py
 }
 
 check_tool_R() {
-    Rscript -e "
-    packages <- c('DESeq2', 'clusterProfiler', 'tximport', 'ggplot2')
-    for (pkg in packages) {
-        if (requireNamespace(pkg, quietly = TRUE)) {
-            version <- as.character(packageVersion(pkg))
-            cat(sprintf('%-20s %s\n', pkg, version))
-        } else {
-            cat(sprintf('%-20s NOT FOUND — check installation\n', pkg))
-        }
-    }
-    "
+    Rscript scripts/check_R_libs.R
 }
 
-check_tool_shell  "fastqc"             "--version"
-check_tool_shell  "fastp"              "--version"
-check_tool_shell  "STAR"               "--version"
-check_tool_shell  "salmon"             "--version"
-check_tool_shell  "samtools"           "--version"
-check_tool_shell  "multiqc"            "--version"
-check_tool_shell  "seqkit"             "--version"
-check_tool_python "pandas"             "--version"
-check_tool_python "numpy"              "--version"
-check_tool_python "matplotlib"         "--version"
-check_tool_python "seaborn"            "--version"
-check_tool_R      "DESeq2"             "--version"
-check_tool_R      "clusterProfiler"    "--version"
-check_tool_R      "tximport"           "--version"
-check_tool_R      "ggplot2"            "--version"
+check_tool_shell
+check_tool_python
+check_tool_R
 
 
 
