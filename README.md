@@ -12,7 +12,7 @@ Rather than reproducing the exact computational environment from the original st
 - Modular RNA-seq pipeline implemented as reusable Bash scripts
 - Separation of code, data, and results following best practices
 - Reproducible environment management using Conda
-- End-to-end workflow: raw data -> QC -> alignment -> quantification -> differential expression -> enrichment
+- Semi-automated workflow: raw data -> QC -> alignment -> quantification steps are automated. Downstream analysis steps of differential expression and enrichment are done manually in Quarto notebooks
 - Application to a real biological dataset (_Artemisia annua_)
 
 ## Tools and Technologies
@@ -63,10 +63,11 @@ bash setup_environment.sh
 micromamba activate genomics
 ```
 
-### 2. Download data
+### 2. Download data & build STAR Index
 ```bash
 bash scripts/get_fastq_files.sh
 bash scripts/get_reference_genome.sh
+bash scripts/build_star_index.sh
 ```
 
 ### 3. Run pipeline (QC, trim, align, quantify steps only)
@@ -100,14 +101,17 @@ bash run_pipeline.sh --steps qc_raw trim qc_trimmed multiqc
 ## Repository Structure
 ```
 /artemisia-annua-rna-seq-project
-├── config.sh            # main config
-├── config.yaml          # main config (yaml version)
-├── samples.csv          # sample manifest
-├── run_pipeline.sh      # main runner script
+├── config.sh                # main config
+├── config.yaml              # main config (yaml version)
+├── samples.csv              # sample manifest
+├── run_pipeline.sh          # main runner script
 ├── scripts/
 │   ├── setup_environment.sh
 │   ├── get_fastq_files.sh
 │   ├── get_reference_genome.sh
+│   ├── build_star_index.sh
+│   ├── check_python_libs.py  # helper script
+│   ├── check_R_libs.R        # helper script
 │   ├── subsample.sh
 │   ├── qc_raw.sh
 │   ├── quantify.sh
@@ -144,8 +148,8 @@ This pipeline produces:
 - Quality control reports (FastQC, MultiQC)
 - Aligned reads (STAR)
 - Transcript quantification (Salmon)
-- Differential expression results (DESeq2)
-- Functional enrichment analysis (ClusterProfiler)
+
+The final cleaned input data produced by Salmon is then fed to 
 
 ## Acknowledgements
 

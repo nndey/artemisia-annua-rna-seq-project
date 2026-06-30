@@ -3,10 +3,21 @@ raw_data/*
 raw_data/sra_downloads/*
 subsampled_data/*
 trimmed_data/*
+alignment/*
+salmon_quant/*
+counts/*
+
+# quantification files
+*.sf
 
 # sequencing files
 *.fastq
 *.fq
+
+# alignment files
+*.sam
+*.bam
+*.out
 
 # reference genomes
 reference/*
@@ -16,6 +27,9 @@ reference/seqkit_output/*
 *.zip
 *.html
 *.md
+*.json
+*.tsv
+*.csv
 
 # claude
 .claude/

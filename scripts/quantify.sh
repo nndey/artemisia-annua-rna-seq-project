@@ -37,31 +37,41 @@ LIB_TYPE="$6"
 THREADS="$7"
 SALMON="$8"
 
-# STAR always names it BAM "Aligned.sortedByCoord.out.bam" inside the sample dir.
-BAM="${ALIGNMENT_DIR}/${SID}/Aligned.sortedByCoord.out.bam"
+# STAR writes the transcriptome-aligned BAM as "Aligned.toTranscriptome.out.bam"
+# inside the sample dir (produced via --quantMode TranscriptomeSAM). This is
+# transcript-coordinate and grouped by read name — the format salmon's
+# alignment-based mode requires. The separate genome-coordinate BAM
+# (Aligned.sortedByCoord.out.bam) is for other downstream tools, not salmon.
+BAM="${ALIGNMENT_DIR}/${SID}/Aligned.toTranscriptome.out.bam"
 SAMPLE_OUT="${OUT_DIR}/${SID}"
 
 mkdir -p "$SAMPLE_OUT"
 
+# Tell Salmon to use our pre-computer STAR alignments instead of
+# performing its own mapping. Keeps alignments consistent.
+
+# The reference transcriptome FASTA — Salmon needs transcript sequences
+# to estimate effective lengths and correct for sequence bias.
+
+# "A" = auto-detect strand orientation from the data.
+# Salmon examines a subset of reads to determine whether the library
+# is stranded (and in which direction) or unstranded.
+
+# Maps transcript IDs to gene IDs so Salmon can also output
+# gene-level aggregates in quant.genes.sf.
+
+# Extra consistency check: verifies that aligned reads are compatible
+# with the transcriptome sequences. Recommended in alignment-based mode.
+
+# Salmon writes quant.sf, quant.genes.sf, logs, and aux files here.
+
 "$SALMON" quant \
     --alignments "$BAM" \
-    # Tell Salmon to use our pre-computer STAR alignments instead of
-    # performing its own mapping. Keeps alignments consistent.
     --targets "$TRANSCRIPTOME" \
-    # The reference transcriptome FASTA — Salmon needs transcript sequences
-    # to estimate effective lengths and correct for sequence bias.
     --libType "$LIB_TYPE" \
-    # "A" = auto-detect strand orientation from the data.
-    # Salmon examines a subset of reads to determine whether the library
-    # is stranded (and in which direction) or unstranded.
     --geneMap "$GTF" \
-    # Maps transcript IDs to gene IDs so Salmon can also output
-    # gene-level aggregates in quant.genes.sf.
     --threads "$THREADS" \
     --validateMappings \
-    # Extra consistency check: verifies that aligned reads are compatible
-    # with the transcriptome sequences. Recommended in alignment-based mode.
     --output "$SAMPLE_OUT"
-    # Salmon writes quant.sf, quant.genes.sf, logs, and aux files here.
 
 echo "[quantify] ${SID} done"

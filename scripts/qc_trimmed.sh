@@ -29,8 +29,8 @@ mkdir -p "$OUT_DIR"
 
 # Build paths to the trimmed files produced by trim.sh.
 # These filenames must match the --out1 / --out2 values used in trim.sh exactly.
-R1="${TRIMMED_DIR/${SID}_R1_trimmed.fastq.gz"}
-R2="${TRIMMED_DIR/${SID}_R2_trimmed.fastq.gz"}
+R1="${TRIMMED_DIR}/${SID}_R1_trimmed.fastq.gz"
+R2="${TRIMMED_DIR}/${SID}_R2_trimmed.fastq.gz"
 
 "$FASTQC" "$R1" "$R2" \
     --outdir "$OUT_DIR" \

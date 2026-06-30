@@ -67,6 +67,7 @@ ALL_STEPS=(
     qc_trimmed
     align
     quantify
+    count
     tximport
     multiqc
 )
@@ -417,7 +418,7 @@ for sample_line in "${ALL_SAMPLES[@]}"; do
     if should_run_step "align"; then
         log_info ">>> [align] ${SID}"
         run_cmd \
-            "bash scripts/align.sh ${SID} ${TRIMMED_DIR} ${ALIGNMENT_DIR} ${STAR_INDEX} ${REF_GTF} ${THREADS} \"${STAR_SAM_TYPE}\" ${STAR_SAM_ATTR} ${STAR_GENOME_LOAD} ${STAR}" \
+            "bash scripts/align.sh ${SID} ${TRIMMED_DIR} ${ALIGNMENT_DIR} ${STAR_INDEX} ${REF_GTF} ${THREADS} \"${STAR_SAM_TYPE}\" ${STAR_SAM_ATTR} ${STAR_GENOME_LOAD} ${STAR_QUANT_MODE} ${STAR}" \
             "${LOGS_DIR}/star/${SID}.log"
     fi
 
@@ -438,6 +439,15 @@ done
 # These run once after all samples are processed.
 # They operate across all samples rather than one at a time.
 # ==============================================================================
+
+# ---- count ----
+# Merge all per-sample Salmon quant.sf files into one counts matrix CSV.
+if should_run_step "count"; then
+    log_info ">>> [count]"
+    run_cmd \
+        "bash scripts/count.sh ${SALMON_DIR} ${COUNTS_DIR}" \
+        "${LOGS_DIR}/counts/merge.log"
+fi
 
 # ---- tximport ----
 # Aggregate Salmon transcript-level counts to gene level for DESeq2
