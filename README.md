@@ -149,7 +149,7 @@ This pipeline produces:
 - Aligned reads (STAR)
 - Transcript quantification (Salmon)
 
-The final cleaned input data produced by Salmon is then fed to 
+The final cleaned input data produced by Salmon is then fed manually into Quarto notebooks in the `notebooks` directory for further downstream analysis.
 
 ## Acknowledgements
 
