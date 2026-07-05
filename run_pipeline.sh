@@ -450,15 +450,23 @@ if should_run_step "count"; then
 fi
 
 # ---- tximport ----
-# Aggregate Salmon transcript-level counts to gene level for DESeq2
 if should_run_step "tximport"; then
     log_info ">>> [tximport]"
+
+    # Build a comma-separated string of the sample IDs being processed
+    # in this run — may be a subset if --samples was passed to the runner.
+    SAMPLES_ARG=$(IFS=','; echo "${SAMPLE_ID_LIST[*]}")
+    # IFS=',' temporarily sets comma as the separator so bash joins the
+    # array elements with commas instead of spaces.
+
     run_cmd \
         "${RSCRIPT} scripts/tximport.R \
-            --salmon_dir ${SALMON_DIR} \
-            --gtf ${REF_GTF} \
+            --salmon_dir  ${SALMON_DIR} \
+            --gtf         ${REF_GTF} \
             --samples_csv ${SAMPLES_CSV} \
-            --output_dir ${COUNTS_DIR}" \
+            --samples     ${SAMPLES_ARG} \
+            --counts_csv  ${COUNTS_DIR}/counts_matrix.csv \
+            --output_dir  ${COUNTS_DIR}" \
         "${LOGS_DIR}/tximport/tximport.log"
 fi
 

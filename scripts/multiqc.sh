@@ -42,19 +42,20 @@ OUT_DIR="${RESULTS_DIR}/multiqc"
 
 mkdir -p "$OUT_DIR"
 
+# MultiQC recursively searches each directory for files it recognizes.
+# It knows the output formats of FastQC, fastp, STAR, Salmon, and 100+
+# other bioinformatics tools — no configuration needed.
+
+# --force: overwrite any existing MultiQC report.
+# Without this flag, MultiQC exits with an error if the output already exists.
+
 "$MULTIQC" \
     "$QC_RAW_DIR" \
     "$QC_TRIMMED_DIR" \
     "$QC_FASTP_DIR" \
     "$ALIGNMENT_DIR" \
     "$SALMON_DIR" \
-    # MultiQC recursively searches each directory for files it recognizes.
-    # It knows the output formats of FastQC, fastp, STAR, Salmon, and 100+
-    # other bioinformatics tools — no configuration needed.
     --outdir "$OUT_DIR" \
     --force
-    # --force: overwrite any existing MultiQC report.
-    # Without this flag, MultiQC exits with an error if the output already exists.
-
 
 echo "[multiqc] report written to ${OUT_DIR}"

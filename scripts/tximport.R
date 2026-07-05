@@ -2,125 +2,138 @@
 # =============================================================================
 # scripts/tximport.R
 # Aggregate Salmon transcript-level counts to gene level using tximport.
-# Output is a counts matrix ready for DESeq2.
+# Output is a gene-level counts matrix ready for DESeq2.
 # =============================================================================
 #
 # WHY THIS STEP EXISTS:
-# Salmon quantifies expression at the TRANSCRIPT level — one row per
-# transcript isoform. DESeq2 works at the GENE level — one row per gene.
-# A single gene can have many transcripts (isoforms), so we need to 
-# collapse transcript counts up to gene level before running DESeq2.
+# count.sh produces counts/counts_matrix.csv — a transcript-level matrix
+# merged directly from Salmon's quant.sf NumReads column. That matrix is
+# useful for quick inspection but is NOT suitable for DESeq2 because:
+#   1. It is at transcript level, not gene level
+#   2. It has no length-bias correction across samples
 #
-# tximport does this collapse using the tx2gene mapping (transcript ID →
-# gene ID), which we generate here from the GTF annotation file.
+# This script uses tximport to properly collapse transcript counts to gene
+# level using a tx2gene mapping generated from the GTF annotation, and
+# applies lengthScaledTPM scaling so counts are comparable across samples
+# even when isoform usage differs.
+#
+# HOW THIS RELATES TO count.sh:
+#   count.sh output  → counts/counts_matrix.csv     (transcript-level, inspection only)
+#   tximport output  → counts/gene_counts_matrix.csv (gene-level, DESeq2 input)
+#                   → counts/gene_tpm_matrix.csv     (gene-level TPM, visualisation)
+#                   → counts/tximport_object.rds     (full object, preferred DESeq2 input)
+#                   → counts/tx2gene.csv             (transcript → gene mapping)
+#                   → counts/tximport_summary.txt    (run summary)
+#
+# All outputs share the counts/ directory with count.sh's counts_matrix.csv
+# so all count-related files are in one place.
 #
 # WHY lengthScaledTPM:
 # Different samples may have different transcript isoform usage — one sample
-# might express mostly the short isoform of a gene, another mostly the long
-# isoform. This makes raw counts incomparable across samples because longer
-# transcripts produce more reads for the same expression level.
-# lengthScaledTPM corrects for this by scaling counts by the average
-# transcript length across samples before handing off to DESeq2. 
-# This is the current best-practice recommendation for Salmon → DESeq2.
+# might express mostly the short isoform of a gene, another the long isoform.
+# Longer transcripts generate more reads for the same expression level, making
+# raw counts incomparable across samples when isoform usage differs.
+# lengthScaledTPM corrects for this by scaling by average transcript length
+# across samples before handing off to DESeq2. This is the current
+# best-practice recommendation for Salmon → DESeq2 workflows.
 #
 # Usage (called by run_pipeline.sh):
 #   Rscript scripts/tximport.R \
-#    --salmon_dir    salmon_quant/ \
-#    --gtf           references/annotation.gtf \
-#    --samples_csv   samples.csv \
-#    --output_dir    counts/
-#
-# Outputs:
-#   counts/gene_counts_matrix.tsv    — gene-level counts matrix (genes × samples)
-#   counts/tx2gene.csv               — transcript-to-gene mapping used
-#   counts/tximport_summary.txt      — summary of the import
+#     --salmon_dir   salmon_quant/ \
+#     --gtf          reference/GCA_003112345.1_ASM311234v1_genomic.gtf \
+#     --samples_csv  samples.csv \
+#    --samples      SRR6808226,SRR6808227 \
+#     --counts_csv   counts/counts_matrix.csv \
+#     --output_dir   counts/
 # =============================================================================
 
 
 # =============================================================================
 # SECTION 1: ARGUMENT PARSING
-# We use the optparse library to handle command-line arguments cleanly.
-# This is the R equivalent of argparse in Python / case "$1" in bash.
+# optparse handles command-line flags cleanly.
+# R equivalent of argparse in Python / case "$1" in bash.
 # =============================================================================
 
-# suppressPackageStartupMessages suppresses the verbose loading messages
-# that R packages print on startup — keeps script output clean.
 suppressPackageStartupMessages({
-    library(optparse)   # command-line argument parsing
+    library(optparse)
 })
 
-# Define the expected command-line flags.
-# Each make_option() call defines one flag:
-#   option   : the flag name (e.g. "--salmon_dir")
-#   type     : expected data type ("character", "integer", "double")
-#   default  : value used if the flag is not provided (NULL = required)
-#   help     : description shown when --help is run
 option_list <- list(
 
     make_option("--salmon_dir",
         type    = "character",
         default = NULL,
-        help    = "Directory containing per-sample Salmon output (e.g., salmon_quant/)" 
+        help    = "Directory containing per-sample Salmon output (e.g. salmon_quant/)"
     ),
 
     make_option("--gtf",
         type    = "character",
         default = NULL,
-        help    = "Path to genome annotation GTF file (e.g., references/annotation.gtf)" 
+        help    = "Path to genome annotation GTF file (e.g. references/annotation.gtf)"
     ),
 
     make_option("--samples_csv",
         type    = "character",
         default = NULL,
-        help    = "Path to samples.csv with columns: sample_id, condition, r1, r2" 
+        help    = "Path to samples.csv with columns: sample_id, condition, r1, r2"
+    ),
+
+    make_option("--samples",
+    type    = "character",
+    default = NULL,
+    help    = "Comma-separated sample IDs to process (default: all samples in samples_csv).
+               Pass a subset when not all samples have been quantified yet.
+               e.g. --samples SRR6808226,SRR6808227"
+    ),
+
+    make_option("--counts_csv",
+        type    = "character",
+        default = NULL,
+        help    = "Path to counts/counts_matrix.csv produced by count.sh (used for cross-check)"
     ),
 
     make_option("--output_dir",
         type    = "character",
         default = "counts/",
-        help    = "Output directory for counts matrix and tx2gene file [default: counts/]" 
+        help    = "Output directory — same as count.sh output dir [default: counts/]"
     )
 )
 
-# parse_args() reads the actual command-line arguments and matches them
-# to the option_list definitions above.
-# OptionParser() builds the parser object from the option list.
 opt <- parse_args(OptionParser(option_list = option_list))
 
-# Validate that all required arguments were provided.
-# We stop() with a message if any are missing — stop() is R's way of
-# exiting with an error, equivalent to 'echo "ERROR..." & exit 1' in bash.
-if (is.null(opt$salmon_dir)) stop("--salmon_dir is required")
-if (is.null(opt$gtf))        stop("--gtf is required")
-if (is.null(opt$samples_csv)) stop("--samples_csv is required")
+# Validate required arguments.
+# stop() exits with an error message — equivalent to 'echo ERROR && exit 1' in bash.
+if (is.null(opt$salmon_dir))   stop("--salmon_dir is required")
+if (is.null(opt$gtf))          stop("--gtf is required")
+if (is.null(opt$samples_csv))  stop("--samples_csv is required")
+# --counts_csv is optional — cross-check runs only if it's provided
 
 
 # =============================================================================
 # SECTION 2: LOAD LIBRARIES
-# All libraries needed for this script are loaded here, after argument
-# parsing — this way we still get the --help message even if a library
-# is missiong, rather than a cryptic "package not found" error first.
+# Loaded after argument parsing so --help works even if a library is missing.
 # =============================================================================
 
 suppressPackageStartupMessages({
     library(tximport)    # aggregates Salmon transcript counts to gene level
-    library(rtracklayer) # reads GTF files into R as structured objects
-    library(readr)       # fast CSV reading/writing (tidyverse)
-    library(dplyr)       # data manipulation (tidyverse)
+    library(rtracklayer) # reads GTF files into R as structured GRanges objects
+    library(readr)       # fast CSV/TSV reading and writing (tidyverse)
+    library(dplyr)       # data manipulation: filter(), select(), distinct()
+    library(tibble)      # rownames_to_column() for clean data frame handling
 })
 
 
 # =============================================================================
 # SECTION 3: SETUP
-# Create output directory and set up a simple logging function.
 # =============================================================================
 
-# Create output directory if it doesn't exist.
-# recursive = TRUE is equivalent to mkdir -p — creates parent dirs too.
+# Create output directory if it doesn't already exist.
+# recursive = TRUE is the R equivalent of mkdir -p.
+# showWarnings = FALSE suppresses the warning if it already exists.
 dir.create(opt$output_dir, recursive = TRUE, showWarnings = FALSE)
 
-# Simple logging function — pastes a timestamp before every message.
-# format(Sys.time(), ...) formats the current time as a string.
+# Logging function — prepends a timestamp to every message.
+# cat() writes to stdout without adding an extra newline like print() would.
 log_msg <- function(msg) {
     cat(format(Sys.time(), "[%Y-%m-%d %H:%M:%S]"), msg, "\n")
 }
@@ -129,6 +142,7 @@ log_msg("Starting tximport aggregation")
 log_msg(paste("Salmon directory :", opt$salmon_dir))
 log_msg(paste("GTF file         :", opt$gtf))
 log_msg(paste("Samples CSV      :", opt$samples_csv))
+log_msg(paste("counts_matrix.csv:", ifelse(is.null(opt$counts_csv), "(not provided — cross-check skipped)", opt$counts_csv)))
 log_msg(paste("Output directory :", opt$output_dir))
 
 
@@ -139,216 +153,280 @@ log_msg(paste("Output directory :", opt$output_dir))
 
 log_msg("Loading sample manifest...")
 
-# read_csv() reads a CSV file into a tibble (tidyverse data frame).
-# A tibble is like a regular R data.frame but prints more cleanly.
+# Load full sample manifest
 samples <- read_csv(opt$samples_csv, show_col_types = FALSE)
 
-# Build the path to each sample's quant.sf file. 
-# file.path() joins path components with the OS separator (/).
-# It's safer than paste() with "/" because it handles trailing slashes correctly.
-# e.g. file.path("salmon_quant", "ctrl_1", "quant.sf")
-#      → "salmon_quant/ctrl_1/quant.sf"
-quant_files <- file.path(opt$salmon_dir, samples$sample_id, "quant.sf")
+# Filter to requested samples if --samples was provided
+if (!is.null(opt$samples)) {
+    requested <- trimws(strsplit(opt$samples, ",")[[1]])
+    missing_requested <- setdiff(requested, samples$sample_id)
+    if (length(missing_requested) > 0) {
+        stop(paste("Requested samples not found in samples.csv:",
+            paste(missing_requested, collapse = ", ")))
+    }
+    samples <- samples[samples$sample_id %in% requested, ]
+    log_msg(paste("Filtering to", nrow(samples), "requested sample(s):",
+        paste(samples$sample_id, collapse = ", ")))
+}
 
-# Name each path with its sample ID.
-# tximport uses these names as the column names in its output matrix.
+# Build quant_files BEFORE the cross-check — it's needed by both
+quant_files        <- file.path(opt$salmon_dir, samples$sample_id, "quant.sf")
 names(quant_files) <- samples$sample_id
 
-# Validate that all quant.sf files actually exist before proceeding.
-# file.exists() returns a logical vector (TRUE/FALSE per file).
-# !file.exists() flips it — TRUE where files are MISSING.
-missing <- quant_files[!file.exists(quant_files)]
-if (length(missing) > 0) {
+missing_files <- quant_files[!file.exists(quant_files)]
+if (length(missing_files) > 0) {
     stop(paste(
         "Missing quant.sf files for samples:",
-        paste(names(missing), collapse = ", "),
-        "\nExpected paths:\n",
-        paste(missing, collapse = "\n")
+        paste(names(missing_files), collapse = ", "),
+        "\nExpected at:\n",
+        paste(missing_files, collapse = "\n")
     ))
 }
 
-log_msg(paste("Found quant.sf files for", length(quant_files), "samples"))
+log_msg(paste("Found quant.sf files for", length(quant_files), "samples:",
+    paste(names(quant_files), collapse = ", ")))
 
+# Cross-check against count.sh output — now quant_files exists
+if (!is.null(opt$counts_csv)) {
+    log_msg("Cross-checking against count.sh counts_matrix.csv...")
+    # ... rest of cross-check block unchanged
+}
+
+# =============================================================================
+# SECTION 5: CROSS-CHECK AGAINST count.sh OUTPUT (optional)
+# If --counts_csv was provided, compare the sample columns in count.sh's
+# counts_matrix.csv against the quant.sf files found here.
+#
+# WHY: count.sh and tximport.R both derive sample lists independently.
+# If they disagree (e.g. a sample failed quantification so count.sh has
+# fewer columns than expected) that's worth flagging before running
+# tximport on a potentially incomplete dataset.
+# =============================================================================
+
+if (!is.null(opt$counts_csv)) {
+    log_msg("Cross-checking against count.sh counts_matrix.csv...")
+
+    if (!file.exists(opt$counts_csv)) {
+        # Non-fatal warning — count.sh may not have run yet.
+        # We warn and continue rather than stopping.
+        warning(paste("counts_matrix.csv not found at:", opt$counts_csv,
+            "— cross-check skipped. Run count.sh first if you want this check."))
+    } else {
+        # Read just the header of counts_matrix.csv to get column names.
+        # n_max = 0 reads zero data rows — we only want the column names.
+        counts_header <- read_csv(opt$counts_csv, n_max = 0,
+                                  show_col_types = FALSE)
+
+        # Column names from count.sh: first column is "Name" (transcript ID),
+        # remaining columns are sample IDs.
+        # We drop "Name" to get just the sample ID columns.
+        counts_samples <- colnames(counts_header)[colnames(counts_header) != "Name"]
+
+        # Sample IDs from quant.sf discovery above.
+        tximport_samples <- names(quant_files)
+
+        # Find samples in count.sh output that tximport can't find quant.sf for.
+        only_in_counts <- setdiff(counts_samples, tximport_samples)
+        # Find samples tximport found that count.sh doesn't have.
+        only_in_tximport <- setdiff(tximport_samples, counts_samples)
+
+        if (length(only_in_counts) > 0) {
+            warning(paste(
+                "Samples in counts_matrix.csv but no quant.sf found:",
+                paste(only_in_counts, collapse = ", ")
+            ))
+        }
+        if (length(only_in_tximport) > 0) {
+            warning(paste(
+                "Samples with quant.sf but missing from counts_matrix.csv:",
+                paste(only_in_tximport, collapse = ", "),
+                "\nRun count.sh again to regenerate counts_matrix.csv."
+            ))
+        }
+        if (length(only_in_counts) == 0 && length(only_in_tximport) == 0) {
+            log_msg(paste("Cross-check passed: both sources agree on",
+                length(tximport_samples), "samples"))
+        }
+    }
+}
 
 
 # =============================================================================
-# SECTION 5: BUILD TX2GENE MAPPING
-# Generate a transcript-to-gene mapping table from the GTF annotation file.
+# SECTION 6: BUILD TX2GENE MAPPING
+# Generate a transcript ID → gene ID mapping table from the GTF annotation.
 #
-# WHY: Salmon's quant.sf files use transcript IDs as row identifiers
-# (e.g. "transcript_001.1"). DESeq2 needs gene IDs (e.g. "gene_001").
-# tximport needs a two-column table mapping each transcript ID to its
-# parent gene ID so it knows which transcripts to collapse together.
+# WHY: count.sh merges at whatever level quant.sf uses (transcript IDs).
+# tximport needs to know which transcripts belong to each gene in order
+# to collapse them. The GTF annotation file contains this mapping.
 #
-# tx2gene format:
-#   Column 1: TXNAME  — transcript ID (must match quant.sf Name column)
-#   Column 2: GENEID  — gene ID
+# tx2gene format — two columns:
+#   TXNAME : transcript ID — must match the 'Name' column in quant.sf exactly
+#   GENEID : gene ID — what tximport collapses transcripts into
 # =============================================================================
 
 log_msg("Building tx2gene mapping from GTF...")
-log_msg("(This may take a few minutes for large GTF files)")
+log_msg("(This may take a few minutes for large or fragmented GTF files)")
 
-# import() from rtracklayer reads the GTF file into a GRanges object —
-# a structured R object representing genomic intervals with metadata.
-# Each row in the GTF becomes one entry with attributes as columns.
-gtf <- import(opt$gtf)
-
-# Convert the GRanges object to a standard R data frame for easier manipulation.
-# as.data.frame() flattens the GRanges structure into rows and columns.
+# import() from rtracklayer reads the GTF into a GRanges object.
+# GRanges is a specialised R object for genomic intervals — each row
+# is one feature (gene, transcript, exon, etc.) with start/end coordinates
+# and metadata columns for attributes like transcript_id and gene_id.
+gtf    <- import(opt$gtf)
 gtf_df <- as.data.frame(gtf)
+# as.data.frame() flattens the GRanges object into a regular R data frame
+# so we can use standard dplyr operations on it.
 
-# Filter to only "transcript" rows — we only need rows that have both
-# a transcript_id and a gene_id attribute.
-# GTF files contain rows for genes, transcripts, exons, CDS, UTRs etc.
-# We only need the transcript-level rows for tx2gene.
+# Filter to transcript-level rows and extract the two columns we need.
+# GTF files have rows for genes, transcripts, exons, CDS, UTRs — we only
+# want transcript rows, which have both transcript_id and gene_id populated.
 tx2gene <- gtf_df %>%
-    # Keep only rows where 'type' column equals "transcript"
     filter(type == "transcript") %>%
+    # type is a standard GTF column — "gene", "transcript", "exon", etc.
 
-    # Select only the two columns we need.
-    # 'transcript_id' and 'gene_id' are standard GTF attribute fields.
-    # Note: some GTF files use different field names — if this errors, 
-    # check your GTF with: head -50 your_annotation.gtf
     select(TXNAME = transcript_id, GENEID = gene_id) %>%
+    # Rename columns to match what tximport expects: TXNAME and GENEID.
+    # select() in dplyr can rename columns inline: new_name = old_name.
 
-    # Remove any duplicate rows (same transcirpt appearing twice).
     distinct()
+    # Remove duplicate rows — the same transcript_id/gene_id pair should
+    # only appear once in the tx2gene table.
 
-# Validate the tx2gene table has content.
 if (nrow(tx2gene) == 0) {
     stop(paste(
-        "tx2gene table is empty.",
-        "Check that your GTF file has 'transcript' rows with",
+        "tx2gene table is empty after filtering the GTF.",
+        "Check that your GTF has 'transcript' type rows with",
         "'transcript_id' and 'gene_id' attributes.",
-        "\nFirst few rows of GTF:\n",
-        paste(head(gtf_df$type), collapse = ", ")
+        "\nTypes found in GTF:", paste(unique(gtf_df$type), collapse = ", ")
     ))
 }
 
-log_msg(paste("tx2gene mapping built:",
+log_msg(paste("tx2gene built:",
     nrow(tx2gene), "transcripts →",
-    length(unique(tx2gene$GENEID)), "genes"
+    length(unique(tx2gene$GENEID)), "unique genes"
 ))
 
-# Save the tx2gene table to the output directory.
-# This is useful for debugging and for DESeq2 annotation later.
+# Save tx2gene to the counts/ directory alongside count.sh's output.
 tx2gene_path <- file.path(opt$output_dir, "tx2gene.csv")
 write_csv(tx2gene, tx2gene_path)
-log_msg(paste("tx2gene saved to:", tx2gene_path))
+log_msg(paste("tx2gene saved:", tx2gene_path))
 
 
 # =============================================================================
-# SECTION 6: RUN TXIMPORT
-# Aggregate transcript-level Salmon counts to gene level.
+# SECTION 7: RUN TXIMPORT
+# Collapse transcript-level Salmon counts to gene level.
 # =============================================================================
 
 log_msg("Running tximport...")
 
-# tximport() is the main function — it reads all quant.sf files and
-# collapses transcript counts to gene level using the tx2gene mapping.
+# tximport() reads all quant.sf files and collapses transcript counts to
+# gene level using the tx2gene mapping.
 #
-# Key arguments:
-#   files                : named vector of quant.sf file paths
-#   type                 : "salmon" tells tximport the file format
-#   tx2gene              : the mapping table we built above
-#   countsFromAbundance  : the scaling method
-# 
-# countsFromAbundance = "lengthScaledTPM":
-#   1. Salmon estimates TPM per transcript (length-normalized abundance)
-#   2. tximport scales these TPMs by the average transcript length
-#      across all samples (not per-sample length)
-#   3. The result is multiplied by the total library size to get counts
-#   This produces counts that are comparable across samples even when 
-#   isoform usage differs — the recommended input for DESeq2.
-#   To change this later: swap "lengthScaledTPM" for:
-#     "scaledTPM"  — simpler scaling, ignores length differences
-#     "no"         — raw estimated counts, no scaling (not recommended
-#                    when isoform usage varies across conditions)
+# countsFromAbundance = "lengthScaledTPM" — the scaling method:
+#   Step 1: Salmon estimates TPM per transcript (length-normalised abundance)
+#   Step 2: tximport scales by the average transcript length across all samples
+#           (not per-sample length, which would introduce unwanted variation)
+#   Step 3: Multiply by library size to recover count-scale values
+#   Result: counts that are comparable across samples even when isoform
+#           usage differs between conditions.
+#   This is the recommended method for Salmon → DESeq2 (Love et al. 2018).
 #
-#   ignoreTxVersion = TRUE:
-#   Transcript IDs in GTF files often have version suffixes
-#   (e.g. "AT1GO1010.1" vs "AT1GO1010"). This strips the version
-#   number so IDs match between the GTF and quant.sf files.
-#   Common source of "no matching transcripts" errors — leave this TRUE.
+# ignoreTxVersion = TRUE:
+#   Strips version suffixes from transcript IDs before matching.
+#   e.g. "AT1G01010.1" becomes "AT1G01010" for matching purposes.
+#   This is a very common source of "no transcripts matched" errors,
+#   especially with plant genome annotations. Leave this TRUE.
 txi <- tximport(
     files               = quant_files,
     type                = "salmon",
     tx2gene             = tx2gene,
     countsFromAbundance = "lengthScaledTPM",
-    ignoreTxVersion     = TRUE
+    # No ignoreTxVersion or ignoreAfterBar needed -
+    # quant.sf and tx2gene IDs already match exactly for this assembly.
 )
 
-# tximport returns a list with three matrices, all genes × samples:
-#   txi$counts     — the gene-level count matrix (what DESeq2 uses)
-#   txi$abundance  — TPM values per gene
-#   txi$length     — average transcript length per gene per sample
+# tximport returns a named list with three matrices (all genes × samples):
+#   txi$counts    — gene-level count matrix       → DESeq2 input
+#   txi$abundance — gene-level TPM matrix         → visualisation
+#   txi$length    — average transcript length     → used internally by DESeq2
 
 
 # =============================================================================
-# SECTION 7: SAVE OUTPUTS
+# SECTION 8: SAVE OUTPUTS
+# All saved to the same counts/ directory as count.sh's counts_matrix.csv
+# so all count-related files are co-located.
 # =============================================================================
 
 log_msg("Saving outputs...")
 
-# --- Gene counts matrix ---
-# txi$counts is a matrix. We convert it to a data frame and add the 
-# gene IDs as an explicit column (rather than row names) for easier
-# downstream handling in DESeq2 and for readable TSV output.
-counts_df <- as.data.frame(txi$counts) %>%
-    tibble::rownames_to_column("gene_id")   # move row names to a column
+# --- Gene-level counts matrix (CSV) ---
+# This is the tximport equivalent of count.sh's counts_matrix.csv, but:
+#   - Collapsed to gene level (count.sh is transcript level)
+#   - Length-bias corrected (count.sh uses raw NumReads)
+#   - Named gene_counts_matrix.csv to clearly distinguish from counts_matrix.csv
+#
+# rownames_to_column() moves the gene IDs from R row names into an
+# explicit "gene_id" column — makes the CSV readable and unambiguous.
+counts_df   <- as.data.frame(txi$counts) %>% rownames_to_column("gene_id")
+counts_path <- file.path(opt$output_dir, "gene_counts_matrix.csv")
+write_csv(counts_df, counts_path)
+log_msg(paste("Gene counts matrix saved:", counts_path))
 
-counts_path <- file.path(opt$output_dir, "gene_counts_matrix.tsv")
-write_tsv(counts_df, counts_path)
-log_msg(paste("Gene counts matrix saved to:", counts_path))
-
-# --- TPM matrix (useful for visualization, not for DESeq2) ---
-tpm_df <- as.data.frame(txi$abundance) %>%
-    tibble::rownames_to_column("gene_id")
-
+# --- TPM matrix (CSV) ---
+# TPM values are useful for within-sample comparisons and visualisation
+# (heatmaps, PCA, expression plots) but should NOT be used as DESeq2 input.
+# DESeq2 requires raw-scale counts, not pre-normalised values.
+tpm_df   <- as.data.frame(txi$abundance) %>% rownames_to_column("gene_id")
 tpm_path <- file.path(opt$output_dir, "gene_tpm_matrix.csv")
 write_csv(tpm_df, tpm_path)
-log_msg(paste("TPM matrix saved to:", tpm_path))
+log_msg(paste("TPM matrix saved:", tpm_path))
 
-# --- Save the full tximport object as an .rds file ---
-# .rds is R's native binary format for saving a single R object.
-# DESeq2 can load this directly with readRDS(), which is more efficient
-# than re-running tximport and avoids any rounding from the CSV.
-# This is the preferred input format for DESeq2.
+# --- Full tximport object (.rds) ---
+# .rds is R's native single-object binary format.
+# Saving the full txi object is preferable to the CSV alone for DESeq2
+# because DESeqDataSetFromTximport() uses txi$counts, txi$abundance,
+# AND txi$length together — the length matrix enables internal offset
+# correction that improves differential expression accuracy.
+# Load in deseq2.R with: txi <- readRDS("counts/tximport_object.rds")
 rds_path <- file.path(opt$output_dir, "tximport_object.rds")
 saveRDS(txi, rds_path)
-log_msg(paste("tximport object saved to:", rds_path))
+log_msg(paste("tximport object (.rds) saved:", rds_path))
 
 
 # =============================================================================
-# SECTION 8: SUMMARY
-# Print a summary so the log shows key numbers at a glance.
+# SECTION 9: SUMMARY
 # =============================================================================
 
 n_genes   <- nrow(txi$counts)
 n_samples <- ncol(txi$counts)
 
-# Calculate the percentage of genes with zero counts across ALL samples.
-# rowSums() sums each row (gene) across all sample columns.
-# == 0 returns TRUE/FALSE, sum() counts the TRUEs, / n_genes gives %.
+# rowSums() sums counts across all samples for each gene.
+# Genes with a rowSum of 0 have zero counts in every sample.
+# These will be filtered out by DESeq2 automatically, but it's useful
+# to report what fraction they represent.
 pct_zero <- round(sum(rowSums(txi$counts) == 0) / n_genes * 100, 1)
 
 summary_text <- paste0(
     "=== tximport summary ===\n",
-    "Genes          : ", n_genes,    "\n",
-    "Samples        : ", n_samples,  "\n",
-    "Genes all-zero : ", pct_zero, "%\ (will be filtered in DESeq2)\n",
-    "Scaling method : lengthScaledTPM\n",
-    "Outputs:\n",
-    "  ", counts_path, "\n",
-    "  ", tpm_path,    "\n",
-    "  ", rds_path,    "\n",
-    "  ", tx2gene_path, "\n",
+    "Genes            : ", n_genes,    "\n",
+    "Samples          : ", n_samples,  "\n",
+    "Genes all-zero   : ", pct_zero,   "% (filtered automatically in DESeq2)\n",
+    "Scaling method   : lengthScaledTPM\n",
+    "\n",
+    "Outputs (in ", opt$output_dir, "):\n",
+    "  gene_counts_matrix.csv  — gene-level counts for DESeq2 (CSV)\n",
+    "  gene_tpm_matrix.csv     — gene-level TPM for visualisation (CSV)\n",
+    "  tximport_object.rds     — full txi object (preferred DESeq2 input)\n",
+    "  tx2gene.csv             — transcript → gene mapping used\n",
+    "  tximport_summary.txt    — this summary\n",
+    "\n",
+    "Relationship to count.sh output:\n",
+    "  counts_matrix.csv       — transcript-level, raw NumReads (inspection only)\n",
+    "  gene_counts_matrix.csv  — gene-level, length-corrected (DESeq2 input)\n",
     "========================\n"
 )
 
 cat(summary_text)
 
-# Save the summary to a text file for the log record.
 summary_path <- file.path(opt$output_dir, "tximport_summary.txt")
 writeLines(summary_text, summary_path)
 

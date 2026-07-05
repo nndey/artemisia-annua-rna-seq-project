@@ -70,6 +70,10 @@ R2="${TRIMMED_DIR}/${SID}_R2_trimmed.fastq.gz"
 #   alignment/<SID>/Aligned.sortedByCoord.out.bam
 #   alignment/<SID>/Log.final.out   ← alignment summary (MultiQC reads this)
 
+# "./" means "current directory" - which is now SAMPLE_OUT
+
+cd "$SAMPLE_OUT"
+
 "$STAR" \
     --runThreadN "$THREADS" \
     --genomeDir "$STAR_INDEX" \
@@ -80,6 +84,12 @@ R2="${TRIMMED_DIR}/${SID}_R2_trimmed.fastq.gz"
     --outSAMattributes $SAM_ATTR \
     --genomeLoad "$GENOME_LOAD" \
     --quantMode "$STAR_QUANT_MODE" \
-    --outFileNamePrefix "$SAMPLE_OUT"
+    --outFileNamePrefix "./"
+
+
+# cd back to the project root after STAR finishes
+cd - > /dev/null
+# 'cd -' returns to the previous directory
+# '> /dev/null' suppresses the directory path that 'cd -' prints
 
 echo "[align] ${SID} done"

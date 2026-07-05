@@ -6,9 +6,11 @@ trimmed_data/*
 alignment/*
 salmon_quant/*
 counts/*
+results/*
 
 # quantification files
 *.sf
+_STARtmp/
 
 # sequencing files
 *.fastq
