@@ -8,6 +8,9 @@ salmon_quant/*
 counts/*
 results/*
 
+# logs
+logs/*
+
 # quantification files
 *.sf
 _STARtmp/

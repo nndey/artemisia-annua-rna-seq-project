@@ -52,7 +52,7 @@ fi
 # --config and --dry-run can override these
 # =============================================================================
 
-CONFIG="config.yaml"   # default config file location
+CONFIG="config.sh"   # default config file location
 DRY_RUN=false          # default: actually run commands
 STEPS_FILTER=()        # empty = run all steps
 SAMPLES_FILTER=()      # empty = run all samples
@@ -131,7 +131,26 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ==============================================================================
-# SECTION 3: LOGGING
+# SECTION 3: SOURCE CONFIG
+# 'source' (or equivalently '.') reads a shell script into the current shell
+# and executes it. Every variable defined in config.sh becomes available here.
+# ==============================================================================
+
+# Check the config file exists before trying to source it.
+# This gives clear error if someone passes a wrong --config path.
+if [[ ! -f "$CONFIG" ]]; then
+    # We use echo here (not log_error) because LOG_FILE isn't set yet.
+    echo "ERROR: Config file not found: ${CONFIG}"
+    exit 1
+fi
+
+# 'source' executes config.sh in the current shell process.
+# After this line, all variables from config.sh (THREADS, TRIMMED_DIR, etc.)
+# are available as if they had been defined directly in this script.
+source "$CONFIG"
+
+# ==============================================================================
+# SECTION 4: LOGGING
 # All messages go through log_info / log_error so they are consistently
 # timestamped and written to both the terminal and a log file.
 #
@@ -139,7 +158,10 @@ done
 # config (which is where we learn the log directory path).
 # ==============================================================================
 
-LOG-FILE=""   # will be set after sourcing config
+# Now that LOGS_DIR is defined (from config.sh), creates the log directory
+# and point LOG_FILE at it. All subsequent log_info calls will write here.
+mkdir -p "$LOGS_DIR"
+LOG_FILE="${LOGS_DIR}/pipeline.log"
 
 log() {
     # log LEVEL MESSAGE
@@ -161,30 +183,6 @@ log_info()    { log "INFO"    "$1"; }
 log_warming() { log "WARNING" "$1"; }
 log_error()   { log "ERROR"   "$1"; }
 
-# ==============================================================================
-# SECTION 4: SOURCE CONFIG
-# 'source' (or equivalently '.') reads a shell script into the current shell
-# and executes it. Every variable defined in config.sh becomes available here.
-# ==============================================================================
-
-# Check the config file exists before trying to source it.
-# This gives clear error if someone passes a wrong --config path.
-if [[ ! -f "$CONFIG" ]]; then
-    # We use echo here (not log_error) because LOG_FILE isn't set yet.
-    echo "ERROR: Config file not found: ${CONFIG}"
-    exit 1
-fi
-
-# 'source' executes config.sh in the current shell process.
-# After this line, all variables from config.sh (THREADS, TRIMMED_DIR, etc.)
-# are available as if they had been defined directly in this script.
-source "$CONFIG"
-
-# Now that LOGS_DIR is defined (from config.sh), creates the log directory
-# and point LOG_FILE at it. All subsequent log_info calls will write here.
-mkdir -p "$LOGS_DIR"
-LOG_FILE="${LOGS_DIR}/pipeline.log"
-
 log_info "Config sourced: ${CONFIG}"
 log_info "Log file: ${LOG_FILE}"
 
@@ -203,7 +201,8 @@ if [[ -z "${SAMPLES_CSV:-}" ]]; then
     log_error "SAMPLES_CSV is not set in ${CONFIG}"
     exit 1
 fi
-if [[ ~ -f "$SAMPLES_CSV" ]]; then
+
+if [[ ! -f "$SAMPLES_CSV" ]]; then
     log_error "Samples file not found: ${SAMPLES_CSV}"
     exit 1
 fi
