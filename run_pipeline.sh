@@ -213,7 +213,7 @@ fi
 # into mapfile as if it were a file. This is more readable than a pipe
 # because pipes run in a subshell and can't modify the parent's variables.
 mapfile -t ALL_SAMPLES < <(
-    python3 - "$SAMPLES_CSV" << 'PYEOF'
+python3 - "$SAMPLES_CSV" << 'PYEOF'
 import csv, sys
 
 with open(sys.argv[1]) as f:
@@ -221,7 +221,7 @@ with open(sys.argv[1]) as f:
     for row in reader:
         # Print one line per sample in a fixed comma-separated format.
         # The wrapper splits this back into fields in the sample loop.
-        print(f"{row['sample_id']},{row['condition']},{row['r1']},{row['r2']}")
+        print(f"{row['sample_id']},{row['condition']},{row['replicate']},{row['r1']},{row['r2']}")
 PYEOF
 )
 
@@ -255,14 +255,14 @@ if [[ ${#SAMPLES_FILTER[@]} -gt 0 ]]; then
         done
     done
 
-    if [[ ${FILTERED_SAMPLES[@]} -eq 0 ]]; then
-        log_error "No matching samples found for: ${SAMPLES_FILTER[*]}"
-        log_error "Available samples: $(printf '%s ' "${ALL_SAMPLES[@]}" | cut -d',' -f1)"
-        exit 1
+    if [[ ${#FILTERED_SAMPLES[@]} -eq 0 ]]; then
+    log_error "No matching samples found for: ${SAMPLES_FILTER[*]}"
+    log_error "Available samples: $(printf '%s ' "${ALL_SAMPLES[@]}" | cut -d',' -f1)"
+    exit 1
     fi
 
     # Replaces ALL_SAMPLES with the filtered subset.
-    ALL_SAMPLES=("${FILETERED_SAMPLES[@]}")
+    ALL_SAMPLES=("${FILTERED_SAMPLES[@]}")
     log_info "Filtered to ${#ALL_SAMPLES[@]} sample(s): ${SAMPLES_FILTER[*]}"
 fi
 
@@ -379,7 +379,7 @@ for sample_line in "${ALL_SAMPLES[@]}"; do
     if should_run_step "subsample"; then
         log_info ">>> [subsample] ${SID}"
         run_cmd \
-            "bash scripts/subsample.sh ${SID} ${R1} ${R2} ${SUBSAMPLED_DIR} ${SUBSAMPLE_N}" \
+            "bash scripts/subsample.sh \"${SID}\" \"${R1}\" \"${R2}\" \"${SUBSAMPLED_DIR}\" \"${SUBSAMPLE_N}\"" \
             "${LOGS_DIR}/subsample/${SID}.log"
     fi
 
@@ -417,7 +417,7 @@ for sample_line in "${ALL_SAMPLES[@]}"; do
     if should_run_step "align"; then
         log_info ">>> [align] ${SID}"
         run_cmd \
-            "bash scripts/align.sh ${SID} ${TRIMMED_DIR} ${ALIGNMENT_DIR} ${STAR_INDEX} ${REF_GTF} ${THREADS} \"${STAR_SAM_TYPE}\" ${STAR_SAM_ATTR} ${STAR_GENOME_LOAD} ${STAR_QUANT_MODE} ${STAR}" \
+            "bash scripts/align.sh ${SID} ${TRIMMED_DIR} ${ALIGNMENT_DIR} ${STAR_INDEX} ${REF_GTF} ${THREADS} \"${STAR_SAM_TYPE}\" \"${STAR_SAM_ATTR}\" ${STAR_GENOME_LOAD} ${STAR_QUANT_MODE} ${STAR}" \
             "${LOGS_DIR}/star/${SID}.log"
     fi
 

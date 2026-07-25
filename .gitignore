@@ -31,7 +31,8 @@ reference/seqkit_output/*
 # misc 
 *.zip
 *.html
-*.md
+DEBUG_PLAN.md
+pipeline_log_artemisia_annua_intron_retention_enrichment_project.md
 *.json
 *.tsv
 *.csv
@@ -58,4 +59,3 @@ reference/seqkit_output/*
 !trimmed_data/.gitkeep
 !raw_data/sra_downloads/.gitkeep
 !raw_data/tmp/.gitkeep
-!logs/subsample/.gitkeep

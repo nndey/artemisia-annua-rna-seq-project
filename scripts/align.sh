@@ -26,10 +26,10 @@
 set -euo pipefail
 
 SID="$1"
-TRIMMED_DIR="$2"
-OUT_DIR="$3"
-STAR_INDEX="$4"
-GTF="$5"
+TRIMMED_DIR="$(realpath "$2")"
+OUT_DIR="$(realpath "$3")"
+STAR_INDEX="$(realpath "$4")"
+GTF="$(realpath "$5")"
 THREADS="$6"
 SAM_TYPE="$7"
 SAM_ATTR="$8"
