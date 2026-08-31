@@ -59,10 +59,10 @@ done
 # ------------------------------------------------------------------------------
 # Create bash array with SRA sample IDs used in Zhang et al. 2018 study
 # As a reference, SRA IDs correspond to the following sample conditions: 
-# B3, B1, B2, RL2, RL3, WL1, WL2, WL3, RL3
+# B3, B1, B2, RL2, RL3, WL1, WL2, FR2, FR3, D3, FR1, D1, D2, WL3, RL1
 # ------------------------------------------------------------------------------
 
-SraNumbers=(SRR6808226 SRR6808227 SRR6808228 SRR6808229 SRR6808230 SRR6808231 SRR6808232 SRR6808239 SRR6808240)
+SraNumbers=(SRR6808226 SRR6808227 SRR6808228 SRR6808229 SRR6808230 SRR6808231 SRR6808232 SRR6808233 SRR6808234 SRR6808235 SRR6808236 SRR6808237 SRR6808238 SRR6808239 SRR6808240)
 
 LoopSRA ${SraNumbers[@]}
 
