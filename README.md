@@ -250,29 +250,7 @@ Raw sequencing data are publicly available from NCBI SRA under BioProject [PRJNA
 | Far-red | LED far-red light (735 nm) | 3 | SRR6808233, SRR6808234, SRR6808236 |
 | Dark | Dark (no light) | 3 | SRR6808235, SRR6808237, SRR6808238 |
 
-See `scripts/get_fastq_files.sh` for the download script, or download manually:
-
-```bash
-micromamba activate genomics
-
-prefetch --output-directory raw_data/sra_downloads/ \
-    SRR6808226 SRR6808227 SRR6808228 \
-    SRR6808229 SRR6808230 SRR6808240 \
-    SRR6808231 SRR6808232 SRR6808239 \
-    SRR6808233 SRR6808234 SRR6808236 \
-    SRR6808235 SRR6808237 SRR6808238
-
-for SRR in SRR6808226 SRR6808227 SRR6808228 SRR6808229 SRR6808230 \
-           SRR6808231 SRR6808232 SRR6808233 SRR6808234 SRR6808235 \
-           SRR6808236 SRR6808237 SRR6808238 SRR6808239 SRR6808240; do
-    fasterq-dump \
-        --threads 8 \
-        --mem 2G \
-        --split-files \
-        --outdir raw_data/ \
-        raw_data/sra_downloads/${SRR}/${SRR}.sra
-done
-```
+See `scripts/get_fastq_files.sh` for the download script.
 
 ### Reference Genome
 
