@@ -51,6 +51,7 @@ Source: [https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab7.html](htt
 ```{bash}
 #| label: setup-conda-environment
 
+source ~/miniforge3/etc/profile.d/conda.sh
 conda activate genomics
 ```
 

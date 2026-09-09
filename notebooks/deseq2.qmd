@@ -39,6 +39,7 @@ Source: [https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab5.html](htt
 
 ## Setup
 ```{bash}
+source ~/miniforge3/etc/profile.d/conda.sh
 conda activate genomics
 ```
 
@@ -57,13 +58,13 @@ library(tidyverse)   # string manipulation
 ```{r}
 #| label: load-data
 
-txi <- readRDS("../counts/tximport_object.rds")
-sample_info <- read.csv("../samples.csv", header = TRUE, sep = ",")
+txi <- readRDS("counts/tximport_object.rds")
+sample_info <- read.csv("samples.csv", header = TRUE, sep = ",")
 
 # Set factor levels
 sample_info$condition <- factor(
     sample_info$condition,
-    levels=c("white", "red", "far_red", "blue")
+    levels=c("dark", "white", "red", "far_red", "blue")
 )
 
 cat(paste0("Samples: ", nrow(sample_info), "\n"))
@@ -108,7 +109,8 @@ dds <- DESeq(dds)
 # White versus red
 res_wl_vs_red     <- results(
     dds, contrast = c("condition", "red", "white"), 
-    name = "condition_white_vs_red"
+    name = "condition_white_vs_red",
+    alpha = 0.05
 )
 res_wl_vs_red     <- res_wl_vs_red[order(res_wl_vs_red$padj), ]
 
@@ -118,7 +120,8 @@ summary(res_wl_vs_red)
 res_wl_vs_blue    <- results(
     dds,
     contrast = c("condition", "blue", "white"),
-    name = "condition_white_vs_blue"
+    name = "condition_white_vs_blue",
+    alpha = 0.05
 )
 res_wl_vs_blue    <- res_wl_vs_blue[order(res_wl_vs_blue$padj), ]
 
@@ -128,14 +131,67 @@ summary(res_wl_vs_blue)
 res_wl_vs_far_red <- results(
     dds,
     contrast = c("condition", "far_red", "white"),
-    name = "condition_white_vs_far_red"
+    name = "condition_white_vs_far_red",
+    alpha = 0.05
 )
 res_wl_vs_far_red <- res_wl_vs_far_red[order(res_wl_vs_far_red$padj), ]
 
 summary(res_wl_vs_far_red)
 
+# Dark versus far-red
+res_dark_vs_far_red <- results(
+    dds,
+    contrast = c("condition", "far_red", "dark"),
+    name = "condition_dark_vs_far_red",
+    alpha = 0.05
+)
+res_dark_vs_far_red <- res_dark_vs_far_red[order(res_dark_vs_far_red$padj), ]
+
+summary(res_dark_vs_far_red)
+
+# Dark versus red
+res_dark_vs_red <- results(
+    dds,
+    contrast = c("condition", "red", "dark"),
+    name = "condition_dark_vs_red",
+    alpha = 0.05
+)
+res_dark_vs_red <- res_dark_vs_red[order(res_dark_vs_red$padj), ]
+
+summary(res_dark_vs_red)
+
+# Dark versus blue
+res_dark_vs_blue <- results(
+    dds,
+    contrast = c("condition", "blue", "dark"),
+    name = "condition_dark_vs_blue",
+    alpha = 0.05
+)
+res_dark_vs_blue <- res_dark_vs_blue[order(res_dark_vs_blue$padj), ]
+
+summary(res_dark_vs_blue)
+
+# Dark versus white
+res_dark_vs_white <- results(
+    dds,
+    contrast = c("condition", "white", "dark"),
+    name = "condition_dark_vs_white",
+    alpha = 0.05
+)
+res_dark_vs_white <- res_dark_vs_white[order(res_dark_vs_white$padj), ]
+
+summary(res_dark_vs_white)
+
 # Place results into a list
-comparison_list <- list(res_wl_vs_red, res_wl_vs_blue, res_wl_vs_far_red)
+comparison_list <- list(
+  white_vs_red      = res_wl_vs_red,
+  white_vs_blue     = res_wl_vs_blue,
+  white_vs_far_red  = res_wl_vs_far_red,
+  dark_vs_white     = res_dark_vs_white,
+  dark_vs_red       = res_dark_vs_red,
+  dark_vs_blue      = res_dark_vs_blue,
+  dark_vs_far_red   = res_dark_vs_far_red
+)
 ```
 
 ## Results
@@ -151,15 +207,19 @@ comparison_df_sig <- list()
 # Dataframes for each comparison stored in a list
 
 # Log and save all results
-for (i in comparison_list) {
+for (comp_name in names(comparison_list)) {
+    i <- comparison_list[[comp_name]]
+
     result <- as.data.frame(i)
-    results$gene_id <- rownames(result)
+    result$gene_id <- rownames(result)
     result <- result[, c("gene_id", "baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj")]
-    append(comparison_df_all, result)
+    comparison_df_all[[comp_name]] <- result
 }
 
 # Log and save significance results
-for (i in comparison_list) {
+for (comp_name in names(comparison_list)) {
+    i <- comparison_list[[comp_name]]
+
     # Significant: padj < 0.05 and |log2FC| > 1
     sig_genes <- subset(i, padj < 0.05 & abs(log2FoldChange) > 1)
     sig_genes <- sig_genes[order(sig_genes$padj), ]
@@ -167,39 +227,35 @@ for (i in comparison_list) {
     sig_res <- as.data.frame(sig_genes)
     sig_res$gene_id <- rownames(sig_res)
     sig_res <- sig_res[, c("gene_id", "baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj")]
-    append(comparison_df_sig, sig_res)
+    comparison_df_sig[[comp_name]] <- sig_res
 
-    cat(paste0("Total significant genes: ", nrow(sig_genes), "\n"))
-    cat(paste0("Upregulated in ",  str_extract(i$name, "_*$"), ":", sum(sig_genes$log2FoldChange > 0, na.rm = TRUE), "\n"))
-    cat(paste0("Downregulated in ",str_extract(i$name, "_*$"), ":", sum(sig_genes$log2FoldChange < 0, na.rm = TRUE), "\n"))
+    cat(paste0("[", comp_name, "] Total significant genes: ", nrow(sig_genes), "\n"))
+    cat(paste0("[", comp_name, "] Upregulated: ", sum(sig_genes$log2FoldChange > 0, na.rm = TRUE), "\n"))
+    cat(paste0("[", comp_name, "] Downregulated: ", sum(sig_genes$log2FoldChange < 0, na.rm = TRUE), "\n"))
 }
 
 # Looping through list of dataframes and appending them as one
 # Write appended dataframe to one single CSV file
-for (df in comparison_df_all) {
-    all_res <- rbind(all_res, df)
-}
+all_res <- bind_rows(comparison_df_all, .id="comparison")
 
-for (df in comparison_df_sig) {
-    all_sig <- rbind(all_sig, df)
-}
+all_sig <- bind_rows(comparison_df_sig, .id="comparison")
 
-write.csv(all_res, "../results/tables/deseq2_all_results.csv", row.names = FALSE)
-write.csv(all_sig, "../results/tables/deseq2_significant.csv", row.names = FALSE)
+write.csv(all_res, "results/tables/deseq2_all_results.csv", row.names = FALSE)
+write.csv(all_sig, "results/tables/deseq2_significant.csv", row.names = FALSE)
 
 # Normalized counts
 norm_counts <- as.data.frame(counts(dds, normalized = TRUE))
 norm_counts$gene_id <- rownames(norm_counts)
 write.csv(
     norm_counts,
-    glue("{opt$output_dir}/tables/normalized_counts.csv"),
+    "results/tables/normalized_counts.csv",
     row.names = FALSE
 )
-log_msg(paste("Normalized counts saved to:", glue("{opt$output_dir}/tables")))
+cat(paste("Normalized counts saved to:", "results/tables/normalized_counts.csv"))
 
 # Save DESeq2 object for later use
-saveRDS(dds, glue("{opt$output_dir}/deseq2_object.rds"))
-log_msg(paste("dds object saved to:", opt$output_dir))
+saveRDS(dds, "results/deseq2_object.rds")
+cat(paste("dds object saved to:", "results/deseq2_object.rds"))
 ```
 
 
@@ -222,7 +278,7 @@ summary_text <- paste0(
 cat(summary_text)
 
 # save the summary to a text file
-writeLines(summary_text, "..logs/deseq2_import_summary.txt")
+writeLines(summary_text, "results/logs/deseq2_import_summary.txt")
 ```
 
 ## Notes: 

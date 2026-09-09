@@ -42,7 +42,16 @@ Source: [https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab5.html](htt
 - top_genes_heatmap.png                          — Heatmap showing significant differentially expressed genes
 - differential_expression_results_summary.txt    — Summary statistics
 
-## Setup
+## Setup Conda Environment
+
+```{bash}
+#| label: setup-conda-environment
+
+source ~/miniforge3/etc/profile.d/conda.sh
+conda activate genomics
+```
+
+## Import Libraries and Set Up Output Directory
 
 ```{python}
 #| label: setup
