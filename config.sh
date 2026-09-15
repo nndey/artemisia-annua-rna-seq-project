@@ -23,6 +23,9 @@ COUNTS_DIR="counts/"
 RESULTS_DIR="results/"
 RESULTS_TABLES="${RESULTS_DIR}/tables/"
 LOGS_DIR="logs/"
+PROTEIN_FASTA="reference/proteins.faa"
+ANNOTATION_DIR="reference/eggnog_annotation/"
+EGGNOG_DB_DIR="reference/eggnog_db/"
 
 # --- Environment (Tools) ---
 # Full path to the genomics conda/mamba environment bin directory.
@@ -34,6 +37,8 @@ STAR="STAR"
 SALMON="salmon"
 MULTIQC="multiqc"
 RSCRIPT="Rscript"
+GFFREAD="gffread"
+EMAPPER="emapper.py"
 
 # --- Parameters ---
 THREADS=8

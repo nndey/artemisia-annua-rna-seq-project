@@ -61,6 +61,7 @@ SAMPLES_FILTER=()      # empty = run all samples
 # This order controls the sequence steps to run in — don't rearrange it.
 
 ALL_STEPS=(
+    annotate
     subsample
     qc_raw
     trim
@@ -352,6 +353,21 @@ done
 log_info "Steps    : ${STEPS_FILTER[*]:-all}"
 log_info "Samples  : ${SAMPLE_ID_LIST[*]}"
 
+# ==============================================================================
+# SECTION 9b: REFERENCE-LEVEL STEPS
+# Steps that operate on the reference genome/annotation only — no dependency
+# on sample data, so they run once, independent of the per-sample loop below.
+# ==============================================================================
+
+# ---- annotate ----
+# Generate functional annotation (GO/KEGG/orthology) for the reference genome
+# via eggNOG-mapper, since GCA_003112345.1 ships with no functional annotation.
+if should_run_step "annotate"; then
+    log_info ">>> [annotate]"
+    run_cmd \
+        "bash scripts/annotate.sh ${REF_GENOME} ${REF_GTF} ${PROTEIN_FASTA} ${ANNOTATION_DIR} ${EGGNOG_DB_DIR} ${THREADS} ${GFFREAD} ${EMAPPER}" \
+        "${LOGS_DIR}/annotate/annotate.log"
+fi
 
 # ==============================================================================
 # SECTION 10: PER-SAMPLE STEPS
