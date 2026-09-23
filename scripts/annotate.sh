@@ -58,12 +58,24 @@ EGGNOG_DB_DIR="$(realpath "${EGGNOG_DB_DIR}")"
 
 mkdir -p "${ANNOTATION_DIR}"
 
+# NCBI GenBank-derived GTFs attach an empty transcript_id "" attribute to
+# every `gene`-type record. gffread's attribute parser tries to use that
+# empty value as the record's ID and fails with "no valid ID found for GFF
+# record" the moment it hits one. `gene` lines carry no sequence data that
+# gffread's -y (protein extraction) needs -- proteins are built from CDS/exon
+# records grouped under the real transcript_id on `transcript`/`mRNA` lines --
+# so it's safe to drop them before handing the file to gffread.
+FILTERED_GTF="$(dirname "${REF_GTF}")/$(basename "${REF_GTF}" .gtf).no_gene.gtf"
+if [[ ! -s "${FILTERED_GTF}" ]]; then
+    awk -F'\t' '$3 != "gene"' "${REF_GTF}" > "${FILTERED_GTF}"
+fi
+
 # ---- Extract protein sequences (skip if already done) ----
 if [[ -s "${PROTEIN_FASTA}" ]]; then
     echo "Protein FASTA already exists, skipping extraction: ${PROTEIN_FASTA}"
     echo "  ($(grep -c '>' "${PROTEIN_FASTA}") proteins)"
 else
-    "${GFFREAD}" -y "${PROTEIN_FASTA}" -g "${REF_GENOME}" "${REF_GTF}"
+    "${GFFREAD}" -y "${PROTEIN_FASTA}" -g "${REF_GENOME}" "${FILTERED_GTF}"
     echo "Protein sequences extracted: $(grep -c '>' "${PROTEIN_FASTA}") proteins"
 fi
 

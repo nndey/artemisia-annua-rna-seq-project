@@ -31,7 +31,6 @@ reference/seqkit_output/*
 # misc 
 *.zip
 *.html
-DEBUG_PLAN.md
 pipeline_log_artemisia_annua_intron_retention_enrichment_project.md
 *.json
 *.tsv
