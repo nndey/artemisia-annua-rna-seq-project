@@ -32,6 +32,7 @@ reference/seqkit_output/*
 *.zip
 *.html
 pipeline_log_artemisia_annua_intron_retention_enrichment_project.md
+artemisia-annua-rna-seq-project.code-workspace
 *.json
 *.tsv
 *.csv
