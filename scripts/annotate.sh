@@ -19,7 +19,8 @@
 #
 # IDEMPOTENT: both the protein extraction and the eggNOG-mapper run check
 # for their expected output first and skip if already present. This matters
-# because eggNOG-mapper against ~26,750 proteins takes hours, and this step
+# because eggNOG-mapper against ~66,900 transcript-level
+# proteins (~63,200 genes) takes hours, and this step
 # has no --steps filter protection against being re-triggered by a normal
 # no-filter `bash run_pipeline.sh` call.
 #
