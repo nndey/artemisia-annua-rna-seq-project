@@ -57,340 +57,358 @@ conda activate genomics
 
 
 ## Load DE Results and Prepare Gene Lists
-```{python}
+```{r}
 #| label: import-libraries
 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from gprofiler import GProfiler
-import os
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(clusterProfiler)
+  library(GO.db)
+  library(enrichplot)
+})
+
+select <- dplyr::select
+filter <- dplyr::filter
+rename <- dplyr::rename
+slice  <- dplyr::slice
+count  <- dplyr::count
+
+# --- EDIT THESE ------------------------------------------
+paths <- list(
+  tx2gene     = "counts/tx2gene.csv",
+  emapper     = "reference/eggnog_annotation/artemisia_annotation.emapper.annotations",
+  all_results = "results/tables/deseq2_all_results.csv",
+  significant = "results/tables/deseq2_significant.csv",
+  out_dir     = "results/enrichment",
+  out_dir_fig = "results/figures"
+)
+
+# MUST match the thresholds used in deseq2.qmd
+padj_cut <- 0.05
+lfc_cut  <- 1
+# ------------------------------------------------------------
+
+dir.create(paths$out_dir, recursive = TRUE, showWarnings = FALSE)
 
 print("Libraries loaded successfully!")
 ```
 
-```{python}
+```{r}
+#| label: gene-to-go-table
+
+tx2gene <- read_csv(paths$tx2gene, show_col_types = FALSE) # TXNAME, GENEID
+
+emapper <- read_tsv(paths$emapper, comment = "##", na = "-",
+                    col_types = cols(.default = col_character()))
+
+names(emapper)[1] <- "TXNAME"
+sum(!is.na(emapper$GOs))    # expect 30426
+
+gene2go <- emapper %>%
+  select(TXNAME, GOs) %>%
+  filter(!is.na(GOs)) %>%
+  inner_join(tx2gene, by = "TXNAME") %>%
+  separate_rows(GOs, sep = ",") %>%
+  distinct(GENEID, GO = GOs)
+
+write_tsv(gene2go, "reference/gene2go.tsv")
+
+cat("Genes with >=1 GO term:", n_distinct(gene2go$GENEID), "\n")
+cat("Unique GO terms:", n_distinct(gene2go$GO), "\n")
+
+```
+
+```{r}
+#| label: go-info
+go_info <- AnnotationDbi::select(
+  GO.db, keys = unique(gene2go$GO),
+  columns = c("TERM", "ONTOLOGY"), keytype = "GOID"
+) %>% as_tibble() %>% filter(!is.na(ONTOLOGY))
+
+cat("GO IDs not found in GO.db (dropped):",
+    n_distinct(gene2go$GO) - nrow(go_info), "\n")
+
+gene2go <- gene2go %>% inner_join(go_info, by = c("GO" = "GOID"))
+term2name <- go_info %>% select(GO = GOID, TERM)
+```
+
+```{r}
+#| label: gene-to-kegg
+
+stopifnot("KEGG_Pathway" %in% names(emapper))
+
+gene2kegg <- emapper %>%
+  select(TXNAME, KEGG_Pathway) %>%
+  filter(!is.na(KEGG_Pathway)) %>%
+  inner_join(tx2gene, by = "TXNAME") %>%
+  separate_rows(KEGG_Pathway, sep = ",") %>%
+  filter(str_starts(KEGG_Pathway, "ko")) %>%
+  distinct(GENEID, PATHWAY = KEGG_Pathway)
+
+overview_maps <- c("ko01100", "ko01110", "ko01120", "ko01200",
+                   "ko01210", "ko01212", "ko01230", "ko01240")
+gene2kegg <- gene2kegg %>% filter(!PATHWAY %in% overview_maps)
+
+# Pathway names from the KEGG REST API (needs internet). Falls back to IDs.
+term2name_kegg <- tryCatch({
+  kp <- KEGGREST::keggList("pathway")
+  tibble(PATHWAY = str_replace(names(kp), "^path:map", "ko"), NAME = unname(kp))
+}, error = function(e) {
+  warning("KEGG REST lookup failed, using IDs as names: ", conditionMessage(e))
+  tibble(PATHWAY = unique(gene2kegg$PATHWAY), NAME = unique(gene2kegg$PATHWAY))
+})
+
+cat("Genes with >=1 KEGG pathway:", n_distinct(gene2kegg$GENEID), "\n")
+cat("Unique pathways:", n_distinct(gene2kegg$PATHWAY), "\n")
+```
+
+```{r}
 #| label: load-deseq2-results
 
-# Load all DE results
-de_results = pd.read_csv('../results/tables/deseq2_all_results.csv')
+res <- read_csv(paths$all_results, show_col_types = FALSE)
 
-print(f"Total genes in DE results: {len(de_results)}")
-print(f"Columns: {list(de_results.columns)}")
-de_results.head()
+id_col <- intersect(c("GENEID", "gene_id", "gene", "Gene", "...1", "X"),
+                    names(res))[1]
+stopifnot(!is.na(id_col))
+res <- res %>% rename(GENEID = all_of(id_col))
+
+head(res$GENEID, 3)    # expect CTI12_AA...
+stopifnot(any(startsWith(res$GENEID, "CTI12_")))
+stopifnot(all(c("padj", "log2FoldChange") %in% names(res)))
 ```
 
-```{python}
-#| label: define-sig-thresholds-create-gene-lists
+```{r}
+#| label: go-universe-gene-sets
+universe <- intersect(res$GENEID[!is.na(res$padj)], gene2go$GENEID)
 
-# Significance thresholds
-PADJ_THRESHOLD = 0.05
-LOG2FC_THRESHOLD = 1  # |log2FC| > 1 means >2-fold change
+sig <- res %>% filter(!is.na(padj), padj < padj_cut, abs(log2FoldChange) > lfc_cut)
 
-comparisons = de_results['comparison'].unique()
-print(f"Comparisons found: {list(comparisons)}")
+# Sanity check: should reproduce deseq2_significant.csv
+n_sig_file <- nrow(read_csv(paths$significant, show_col_types = FALSE))
+cat("Significant here:", nrow(sig), "| in deseq2_significant.csv:", n_sig_file, "\n")
+if (nrow(sig) != n_sig_file)
+  warning("Thresholds differ from deseq2.qmd. Adjust padj_cut/lfc_cut above.")
 
-gene_lists = {}  # comparison -> {'up': [...], 'down': [...], 'all': [...]}
+gene_sets <- list(
+  all_sig = sig$GENEID,
+  up      = sig$GENEID[sig$log2FoldChange > 0],
+  down    = sig$GENEID[sig$log2FoldChange < 0]
+)
 
-for comp in comparisons:
-    de_subset = de_results[de_results['comparison'] == comp]
-    sig = de_subset[
-        (de_subset['padj'] < PADJ_THRESHOLD) &
-        (de_subset['log2FoldChange'].abs() > LOG2FC_THRESHOLD)
-    ]
-    up = sig[sig['log2FoldChange'] > 0]['gene_id'].tolist()
-    down = sig[sig['log2FoldChange'] < 0]['gene_id'].tolist()
-    all_sig = sig['gene_id'].tolist()
-    
-    gene_lists[comp] = {'up': up, 'down': down, 'all': all_sig}
-    print(f"{comp}: {len(all_sig)} sig genes ({len(up)} up, {len(down)} down)")
+tibble(
+  set = names(gene_sets),
+  n_genes = lengths(gene_sets),
+  n_in_universe = map_int(gene_sets, ~ length(intersect(.x, universe)))
+) %>% print()
+cat("Universe size:", length(universe), "\n")
 ```
 
+```{r}
+#| label: kegg-universe
+#| 
+universe_kegg <- intersect(res$GENEID[!is.na(res$padj)], gene2kegg$GENEID)
+cat("KEGG universe size:", length(universe_kegg), "\n")
+```
 
-## Run GO Enrichment Analysis
+## Run GO Enrichment/Over-Representation Analysis
 
-```{python}
-#| label: initialize-gprofiler-define-helper
+```{r}
+#| label: go-over-representation-analysis
 
-# Initialize g:Profiler
-gp = GProfiler(return_dataframe=True)
-
-def run_enrichment(gene_list, name, sources=['GO:BP', 'GO:MF', 'GO:CC']):
-  """
-  Run g:Profiler enrichment analysis on a gene list.
-
-  Parameters:
-  - gene_list: list of gene IDs
-  - name: description for logging
-  - sources: databases to query (GO:BP, GO:MF, GO:CC, KEGG, REAC, etc.)
-
-  Returns:
-  - DataFrame with enrichment results
-  """
-  if len(gene_list) == 0:
-    print(f"Warning: {name} gene list is empty!")
-    return pd.DataFrame()
-
-  print(f"\nRunning enrichment for {name} ({len(gene_list)} genes)...")
-
-  results = gp.profile(
-    organism='aannua',
-    query=gene_list,
-    sources=sources,
-    user_threshold=0.05, # Significance threshold
-    significance_threshold_method='fdr', # Multiple testing correction
-    no_evidences=False
+run_ora <- function(genes, ont) {
+  t2g <- gene2go %>% filter(ONTOLOGY == ont) %>% select(GO, GENEID)
+  enricher(
+    gene = intersect(genes, universe), universe = universe,
+    TERM2GENE = t2g, TERM2NAME = term2name,
+    pvalueCutoff = 1, qvalueCutoff = 1,     # keep everything; filter below
+    minGSSize = 10, maxGSSize = 500, pAdjustMethod = "BH"
   )
+}
 
-  if len(results) > 0:
-    print(f"     Found {len(results)} significant terms")
-  else:
-    print(f"     No significant terms found")
-  
-  return results
+ontologies <- c(BP = "BP", MF = "MF", CC = "CC")
+
+ora <- expand_grid(set = names(gene_sets), ont = names(ontologies)) %>%
+  mutate(result = map2(set, ont, ~ run_ora(gene_sets[[.x]], ontologies[[.y]])))
+
+ora_tbl <- ora %>%
+  filter(!map_lgl(result, is.null)) %>%
+  mutate(tbl = map(result, ~ as_tibble(.x@result))) %>%
+  select(set, ont, tbl) %>%
+  unnest(tbl)
+
+ora_sig <- ora_tbl %>% filter(p.adjust < 0.05)
+
+ora_sig %>% count(set, ont, name = "n_sig_terms")
 ```
 
-```{python}
-#| label: run-go-enrichment
+## Run KEGG Enrichment/Over-Representation Analysis
 
-go_results = {}  # comparison -> {'all': df, 'up': df, 'down': df}
+```{r}
+#| label: kegg-over-expression-analysis
 
-for comp in comparisons:
-    go_results[comp] = {
-        'all': run_enrichment(gene_lists[comp]['all'], f"{comp} - all", sources=['GO:BP','GO:MF','GO:CC']),
-        'up': run_enrichment(gene_lists[comp]['up'], f"{comp} - up", sources=['GO:BP','GO:MF','GO:CC']),
-        'down': run_enrichment(gene_lists[comp]['down'], f"{comp} - down", sources=['GO:BP','GO:MF','GO:CC']),
-    }
+run_ora_kegg <- function(genes) {
+  enricher(
+    gene = intersect(genes, universe_kegg), universe = universe_kegg,
+    TERM2GENE = gene2kegg %>% select(PATHWAY, GENEID),
+    TERM2NAME = term2name_kegg,
+    pvalueCutoff = 1, qvalueCutoff = 1,
+    minGSSize = 5, maxGSSize = 500, pAdjustMethod = "BH"
+  )
+}
+
+kegg_ora <- map(gene_sets, run_ora_kegg)
+
+kegg_tbl <- kegg_ora %>%
+  discard(is.null) %>%
+  map(~ as_tibble(.x@result)) %>%
+  bind_rows(.id = "set")
+
+if (nrow(kegg_tbl) == 0)
+  kegg_tbl <- tibble(set = character(), ID = character(),
+                     Description = character(), p.adjust = numeric())
+
+kegg_sig <- kegg_tbl %>% filter(p.adjust < 0.05)
+
+kegg_sig %>% count(set, name = "n_sig_pathways")
 ```
 
-```{python}
-#| label: explore-go-results
+```{r}
+#| label: terpenoid-pathway-check
 
-# View columns in results
-if len(go_all) > 0:
-  print("Columns in enrichment results:")
-  print(go_all.columns.tolist())
-  print("\nTop 10 GO terms for all significant genes:")
-  display(go_all[['source', 'native', 'name', 'p_value', 'intersection_size']].head(10))
+kegg_tbl %>%
+  filter(ID %in% c("ko00900", "ko00909")) %>%
+  select(set, ID, Description, GeneRatio, BgRatio, pvalue, p.adjust, Count)
 ```
 
+```{r}
+#| label: top-go-and-kegg-terms
 
-## Run KEGG Pathway Analysis
+ora_sig %>%
+  group_by(set, ont) %>%
+  slice_min(p.adjust, n = 5) %>%
+  select(set, ont, Description, GeneRatio, BgRatio, p.adjust, Count) %>%
+  arrange(set, ont, p.adjust) %>%
+  print(n = 60)
 
-```{python}
-#| label: run-kegg-pathway-analysis
-
-kegg_results = {}  # comparison -> {'all': df, 'up': df, 'down': df}
-
-for comp in comparisons:
-    kegg_results[comp] = {
-        'all': run_enrichment(gene_lists[comp]['all'], f"{comp} - all (KEGG)", sources=['KEGG']),
-        'up': run_enrichment(gene_lists[comp]['up'], f"{comp} - up (KEGG)", sources=['KEGG']),
-        'down': run_enrichment(gene_lists[comp]['down'], f"{comp} - down (KEGG)", sources=['KEGG']),
-    }
+# KEGG
+kegg_sig %>%
+  group_by(set) %>%
+  slice_min(p.adjust, n = 5) %>%
+  select(set, ID, Description, GeneRatio, BgRatio, p.adjust, Count) %>%
+  arrange(set, p.adjust) %>%
+  print(n = 30)
 ```
 
-```{python}
-#| label: display-kegg-results
+```{r}
+#| label: dotplots
 
-# Display KEGG results
-if len(kegg_all) > 0:
-  print("Top KEGG pathways for all significant genes:")
-  display(kegg_all[['native', 'name', 'p_value', 'intersection_size']].head(10))
-else:
-  print("No significant KEGG pathways found for all genes")
-```
+for (i in seq_len(nrow(ora))) {
+  r <- ora$result[[i]]
+  if (is.null(r)) next
+  if (!any(r@result$p.adjust < 0.05)) next
+  r@pvalueCutoff <- 0.05; r@qvalueCutoff <- 1  # plot only significant terms
+  p <- dotplot(r, showCategory = 15) +
+    ggtitle(paste(ora$set[i], ora$ont[i]))
+  print(p)
+  ggsave(file.path(paths$out_dir_fig,
+                   sprintf("dotplot_%s_%s.png", ora$set[i], ora$ont[i])),
+         p, width = 8, height = 6, dpi = 200)
+}
 
-## Visualize Enrichment Results
-
-```{python}
-#| label: define-plotting-functions
-
-# Enrichment bar plot
-def plot_enrichment_bar(results, title, top_n=15, figsize=(10,8)):
-  """
-  Create a bar plto of top enriched terms.
-  """
-  if len(results) == 0:
-    print(f"No results to plot for: {title}")
-    return None
-  
-  # Get top N results
-  plot_data = results.head(top_n).copy()
-  plot_data = plot_data.sort_values('p_value', ascending=True)
-
-  # Create -log10(p-value) for better visualization
-  plot_data['-log10(p)'] = -np.log10(plot_data['p_value'])
-
-  # Create figure
-  fig, ax = plt.subplots(figsize=figsize)
-
-  # Color by source (GO:BP, GO:MF, GO:CC, KEGG)
-  colors = {'GO:BP': '#1f77b4', 'GO:MF':'#ff7f0e', 'GO:CC':'#2ca02c', 'KEGG':'#d62728'}
-  bar_colors = [colors.get(s, '#7f7f7f') for s in plot_data['source']]
-
-  # Create horizontal bar plot
-  bars = ax.barh(range(len(plot_data)), plot_data['-log10(p)'], color=bar_colors)
-
-  # Customize plot
-  ax.set_yticks(range(len(plot_data)))
-  ax.set_yticklabels(plot_data['name'], fontsize=9)
-  ax.set_xlabel('-log10(p-value)', fontsize=12)
-  ax.set_title(title, fontsize=14, fontweight='bold')
-
-  # Add gene count labels
-  for i, (bar, count) in enumerate(zip(bars, plot_data['intersection_size'])):
-    ax.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height()/2,
-            f'n={count}', va='center', fontsize=8)
-
-  # Add legend
-  from matplotlib.patches import Patch
-  legend_elements = [Patch(facecolor=c, label=s) for s, c in colors.items() if s in plot_data['source'].values]
-  if legend_elements:
-    ax.legend(handles=legend_elements, loc='lower right')
-  
-  plt.tight_layout()
-  return fig
-
-# Enrichment dot plot
-  def plot_enrichment_dot(results, title, top_n=15, figsize=(10, 8)):
-    """
-    Create a dot plot of top enriched terms (similar to clusterProfiler style).
-    """
-    if len(results) == 0:
-      print(f"No results to plot for: {title}")
-      return None
-    
-    plot_data = results.head(top_n).copy()
-
-    # Calculate gene ratio
-    plot_data['GeneRatio'] = plot_data['intersection_size'] / plot_data['query_size']
-    plot_data['-log10(p)'] = -np.log10(plot_data['p_value'])
-
-    fig, ax = plt.subplots(figsize=figsize)
-
-    scatter = ax.scatter(
-      plot_data['GeneRatio'],
-      range(len(plot_data)),
-      s=plot_data['intersection_size'] * 10, # Size by gene count
-      c=plot_data['-log10(p)'], # Color by significance
-      cmap='viridis',
-      alpha=0.7,
-      edgecolors='black',
-      linewidths=0.5
-    )
-
-    ax.set_yticks(range(len(plot_data)))
-    ax.set_yticklabels(plot_data['name'], fontsize=9)
-    ax.set_xlabel('Gene Ratio', fontsize=12)
-    ax.set_title(title, fontsize=14, fontweight='bold')
-
-    # Add colorbar
-    cbar = plt.colorbar(scatter, ax=ax, label='-log10(p-value)')
-
-    # Add size legend
-    sizes = [5, 10, 20]
-    for size in sizes:
-      ax.scatter([], [], s=size*10, c='gray', alpha=0.7, label=f'{size} genes')
-    ax.legend(loc='lower right', title='Gene Count')
-
-    plt.tight_layout()
-    return fig
-```
-
-```{python}
-#| label: plot-go-enrichment
-
-import os
-
-for comp in comparisons:
-    outdir = f'../results/enrichment/{comp}'
-    os.makedirs(outdir, exist_ok=True)
-
-    for subset in ['all', 'up', 'down']:
-        results = go_results[comp][subset]
-        label = f"GO Enrichment - {comp} ({subset})"
-        fig = plot_enrichment_bar(results, label)
-        if fig:
-            fig.savefig(f'{outdir}/go_{subset}_bar.png', dpi=150, bbox_inches='tight')
-            plt.show()
-        plt.close('all')  # prevent figure buildup across 21 iterations
-```
-
-```{python}
-#| label: create-dot-plots-publication
-
-for comp in comparisons:
-    outdir = f'../results/enrichment/{comp}'
-    fig = plot_enrichment_dot(go_results[comp]['all'], f"GO Enrichment - {comp} (all, dot plot)")
-    if fig:
-        fig.savefig(f'{outdir}/go_all_dot.png', dpi=150, bbox_inches='tight')
-        plt.show()
-    plt.close('all')
-```
-
-```{python}
-#| label: plot-kegg-pathways
-
-for comp in comparisons:
-    outdir = f'../results/enrichment/{comp}'
-    for subset in ['all', 'up', 'down']:
-        results = kegg_results[comp][subset]
-        label = f"KEGG Pathways - {comp} ({subset})"
-        fig = plot_enrichment_bar(results, label, top_n=10)
-        if fig:
-            fig.savefig(f'{outdir}/kegg_{subset}_bar.png', dpi=150, bbox_inches='tight')
-            plt.show()
-        plt.close('all')
+# KEGG
+for (s in names(kegg_ora)) {
+  r <- kegg_ora[[s]]
+  if (is.null(r) || !any(r@result$p.adjust < 0.05)) next
+  r@pvalueCutoff <- 0.05; r@qvalueCutoff <- 1
+  p <- dotplot(r, showCategory = 15) + ggtitle(paste(s, "KEGG"))
+  print(p)
+  ggsave(file.path(paths$out_dir_fig, sprintf("dotplot_%s_KEGG.png", s)),
+         p, width = 8, height = 6, dpi = 200)
+}
 ```
 
 ## Save Results to TSV Files
-```{python}
+```{r}
 #| label: save-all-enrichment-results
 
-for comp in comparisons:
-    outdir = f'../results/enrichment/{comp}'
-    for subset in ['all', 'up', 'down']:
-        save_enrichment_results(go_results[comp][subset], f'{comp}/go_{subset}')
-        save_enrichment_results(kegg_results[comp][subset], f'{comp}/kegg_{subset}')
+save_tsv <- function(x, f) write_tsv(x, file.path(paths$out_dir, f))
 
-print("\nAll results saved to ../results/enrichment/<comparison>/")
+# Annotation tables and inputs (for reproducibility)
+save_tsv(gene2go %>% select(GENEID, GO, ONTOLOGY, TERM), "gene2go_annotated.tsv")
+save_tsv(gene2kegg, "gene2kegg.tsv")
+save_tsv(tibble(GENEID = universe), "universe_go.tsv")
+save_tsv(tibble(GENEID = universe_kegg), "universe_kegg.tsv")
+save_tsv(enframe(gene_sets, name = "set", value = "GENEID") %>% unnest(GENEID),
+         "gene_sets.tsv")
+
+# Enrichment results (the geneID column lists member genes, "/"-separated)
+save_tsv(ora_tbl,  "go_ora_all_terms.tsv")
+save_tsv(ora_sig,  "go_ora_significant.tsv")
+save_tsv(kegg_tbl, "kegg_ora_all_pathways.tsv")
+save_tsv(kegg_sig, "kegg_ora_significant.tsv")
+
+list.files(paths$out_dir)
 ```
 
-## Create summary report
-```{python}
-#| label: summary-report
+## Create summary reports
+```{r}
+#| label: summary-params
 
-summary_lines = [
-    "============================================",
-    "Enrichment Analysis Summary (per comparison)",
-    "============================================",
-    "",
-]
+params <- tibble(
+  parameter = c("DE cutoff: padj <", "DE cutoff: |log2FC| >",
+                "ORA significance: p.adjust <", "GO term size (genes)",
+                "KEGG pathway size (genes)", "Genes tested (non-NA padj)",
+                "GO universe", "KEGG universe"),
+  value = c(padj_cut, lfc_cut, 0.05, "10-500", "5-500",
+            sum(!is.na(res$padj)), length(universe), length(universe_kegg))
+) %>% mutate(value = as.character(value))
+knitr::kable(params)
 
-for comp in comparisons:
-    summary_lines += [
-        f"Comparison: {comp}",
-        f"  Significant genes: {len(gene_lists[comp]['all'])} "
-        f"({len(gene_lists[comp]['up'])} up, {len(gene_lists[comp]['down'])} down)",
-        f"  GO terms - all: {len(go_results[comp]['all'])}, "
-        f"up: {len(go_results[comp]['up'])}, down: {len(go_results[comp]['down'])}",
-        f"  KEGG pathways - all: {len(kegg_results[comp]['all'])}, "
-        f"up: {len(kegg_results[comp]['up'])}, down: {len(kegg_results[comp]['down'])}",
-        "",
-    ]
+set_sizes <- tibble(
+  set = names(gene_sets),
+  n_genes = lengths(gene_sets),
+  n_in_go_universe = map_int(gene_sets, ~ length(intersect(.x, universe))),
+  n_in_kegg_universe = map_int(gene_sets, ~ length(intersect(.x, universe_kegg)))
+)
+knitr::kable(set_sizes)
+```
 
-summary_lines += [
-    f"Significance thresholds: padj < {PADJ_THRESHOLD}, |log2FoldChange| > {LOG2FC_THRESHOLD}",
-    "============================================",
-]
+```{r}
+#| label: summary-counts
 
-summary = "\n".join(summary_lines)
-print(summary)
+enrich_summary <- bind_rows(
+  ora_tbl %>% mutate(analysis = ont),
+  kegg_tbl %>% mutate(analysis = "KEGG")
+) %>%
+  group_by(set, analysis) %>%
+  summarise(terms_tested = n(),
+            terms_significant = sum(p.adjust < 0.05),
+            .groups = "drop")
 
-with open('../results/enrichment/analysis_summary.txt', 'w') as f:
-    f.write(summary)
+knitr::kable(enrich_summary)
+save_tsv(enrich_summary, "enrichment_summary.tsv")
+```
+
+```{r}
+#| label: summary-top-hits
+
+top_hits <- bind_rows(
+  ora_sig  %>% mutate(analysis = ont),
+  kegg_sig %>% mutate(analysis = "KEGG")
+) %>%
+  group_by(set, analysis) %>%
+  slice_min(p.adjust, n = 3, with_ties = FALSE) %>%
+  ungroup() %>%
+  select(set, analysis, ID, Description, GeneRatio, BgRatio, p.adjust, Count)
+
+knitr::kable(top_hits, digits = 4)
+save_tsv(top_hits, "top_hits.tsv")
+```
+
+```{r}
+#| label: session-info
+
+sessionInfo()
 ```
 
 ## Notes
