@@ -20,30 +20,39 @@ execute:
 
 ## Overview
 
-This notebook performs functional enrichment analysis using the g:Profiler python package on the data obtained from differential expression analysis (as done by DESeq2). Enrichment results are then visualized with bar plots and dot plots to better analyze and understand upregulated, downregulated, and all differentially expressed genes. 
+This notebook performs functional enrichment analysis on the differential expression results from DESeq2. Because *Artemisia annua* has no functional annotation in public databases like g:Profiler, GO terms and KEGG pathways are assigned to genes through eggNOG-mapper (orthology-based transfer), and over-representation analysis (ORA) is run in R with clusterProfiler. Each test uses a hypergeometric test with Benjamini-Hochberg correction. Enrichment is run separately for upregulated, downregulated, and all significant DE genes, against GO Biological Process, Molecular Function, and Cellular Component, and against KEGG pathways. Results are visualized as dot plots.
 
-Analysis code and notes were borrowed from KAUST Academy.
+**Method notes:**
+- Significant genes: padj < 0.05 and |log2FC| > 1 (set in the setup chunk; must match `deseq2.qmd`). The notebook checks its significant-gene count against `deseq2_significant.csv`.
+- Transcript-level eggNOG annotations are mapped to genes through `tx2gene.csv`, and GO terms or pathways are unioned per gene.
+- Background universe: genes tested by DESeq2 (non-NA padj) that have at least one annotation in the system being tested. GO and KEGG use separate universes.
+- Term size limits: 10 to 500 genes for GO, 5 to 500 for KEGG. Giant KEGG overview maps (e.g. "Metabolic pathways") are excluded.
+- The terpenoid pathways ko00900 and ko00909 are reported regardless of significance.
 
-Source: [https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab7.html](https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab7.html)
+Initial workflow adapted from KAUST Academy (lab 7, which used g:Profiler): [https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab7.html](https://bioinfo-kaust.github.io/academy-stage3-2026/html/lab7.html)
 
 **INPUTS:**
- results/tables/deseq2_all_results.csv   — all DESeq2 results
+- `results/tables/deseq2_all_results.csv`: all DESeq2 results
+- `results/tables/deseq2_significant.csv`: significant DESeq2 results (used only as a sanity check)
+- `counts/tx2gene.csv`: transcript-to-gene mapping
+- `reference/eggnog_annotation/artemisia_annotation.emapper.annotations`: eggNOG-mapper functional annotation
 
-**OUTPUTS:**
-- go_all_genes_bar.png           — all DE genes bar chart
-- go_upregulated_bar.png         — upregulated bar chart
-- go_downregulated_bar.png       — downregulated bar chart
-- go_all_genes_dot.png           — all DE genes dot chart
-- kegg_all_bar.png               — all DE genes KEGG bar chart
-- kegg_up_bar.png                — upregulated genes KEGG bar chart
-- kegg_down_bar.png              — downregulated genes KEGG bar chart
-- go_all_significant_genes.tsv   — GO results for all DE genes
-- go_upregulated_genes.tsv       — GO results for upregulated genes
-- go_downregulated_genes.tsv     — GO results for downregulated genes
-- kegg_all_significant_genes.tsv                              — KEGG results for all DE genes
-- kegg_upregulated_genes.tsv     — KEGG results for upregulated genes
-- kegg_downregulated_genes.tsv   — KEGG results for downregulated genes
-- analysis_summary.txt           — Enrichment analysis summary
+**OUTPUTS** (in `results/enrichment/` unless noted):
+- `reference/gene2go.tsv`: gene-to-GO table (written before ontology annotation)
+- `gene2go_annotated.tsv`: gene-to-GO table with term names and ontology
+- `gene2kegg.tsv`: gene-to-KEGG pathway table
+- `universe_go.tsv`, `universe_kegg.tsv`: background gene universes
+- `gene_sets.tsv`: genes in each tested set (all_sig, up, down)
+- `go_ora_all_terms.tsv`: GO results, all terms tested
+- `go_ora_significant.tsv`: GO results, p.adjust < 0.05
+- `kegg_ora_all_pathways.tsv`: KEGG results, all pathways tested
+- `kegg_ora_significant.tsv`: KEGG results, p.adjust < 0.05
+- `enrichment_summary.tsv`: terms tested and significant per gene set and analysis
+- `top_hits.tsv`: top 3 significant terms per gene set and analysis
+- `dotplot_<set>_<BP|MF|CC>.png`: GO dot plots (set = all_sig, up, or down)
+- `dotplot_<set>_KEGG.png`: KEGG dot plots
+
+Dot plots are only produced for gene sets with at least one significant term.
 
 
 ## Setup Conda Environment
@@ -410,22 +419,3 @@ save_tsv(top_hits, "top_hits.tsv")
 
 sessionInfo()
 ```
-
-## Notes
-
-### From Gene Lists to Biological Insight
-
-Enrichment analysis helps answer: **"*What biological processes or pathways are over-represented in my gene list?"**
-
-- **Gene Ontology (GO):** Standardized vocabulary for gene function
-   - Biological Process (BP) - What the gene does
-   - Molecular Function (MF) - How it does it
-   - Cellular Component (CC) - Where it acts
-- **KEGG Pathways:** Biological pathway maps linking genes to cellular processes
-
-### g:Profiler
-g:Profiler is a widely-used tool for functional enrichment analysis. The python package `gprofiler-official` provides programmatic access to the g:Profiler web service.
-
-- Supports multiple organisms and gene ID types
-- Queries GO, KEGG, Reactome, and other databases
-- Returns statistical significance with multiple testing correction
