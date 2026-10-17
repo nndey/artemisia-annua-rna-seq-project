@@ -347,11 +347,11 @@ Only widen scope once Phase 3 works. Change **one variable at a time** — don't
 ## Phase 5 - Run wrapper, perform downstream analyses in Quarto Notebooks
 
 - [X] Run all steps for all samples
-- [ ] Import outputs from pipeline runner into Quarto notebooks
-- [ ] Perform differential gene expression analysis with DESeq2
-- [ ] Generate  QC plots
-- [ ] Perform enrichment analysis
-- [ ] Generate visualization
+- [X] Import outputs from pipeline runner into Quarto notebooks
+- [X] Perform differential gene expression analysis with DESeq2
+- [X] Generate  QC plots
+- [X] Perform enrichment analysis
+- [X] Generate visualization
 
 ## Quick reference: when something breaks
 
