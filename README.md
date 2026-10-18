@@ -128,16 +128,22 @@ micromamba activate genomics
 > The pipeline checks that the `genomics` environment is active before running.
 > If it isn't, you'll get a clear error message with activation instructions.
 
+**Exact reproduction:** `setup_environment.sh` pins the tools the pipeline uses, but their dependencies resolve to newer releases over time. To recreate the exact environment the results were produced with (Linux x86_64), use the lockfile instead:
+
+```bash
+mamba env create -f environment.yml
+```
+
 ### 2. Download data, build indexes, and set up annotation
 
 ```bash
 bash scripts/get_fastq_files.sh
 bash scripts/get_reference_genome.sh
 bash scripts/build_star_index.sh
-bash scripts/setup_annotation.sh reference/eggnog_db/   # one-time: installs gffread + eggnog-mapper, downloads the eggNOG database
+bash scripts/setup_annotation.sh reference/eggnog_db/   # one-time: downloads the eggNOG database
 ```
 
-> `setup_annotation.sh` runs `mamba install` into the active environment, so run it with `genomics` activated. The database download takes roughly 45 minutes with `aria2c` (see [Known Quirks](#known-quirks)).
+> `setup_annotation.sh` only downloads the database. gffread and eggnog-mapper are installed by `setup_environment.sh`, so run it with `genomics` activated (it uses the `aria2c` that comes with eggnog-mapper). The download takes roughly 45 minutes (see [Known Quirks](#known-quirks)).
 
 See the [Data Availability](#data-availability) section for accession numbers and direct download links.
 
@@ -350,19 +356,22 @@ gunzip reference/*.gz
 
 All tools are managed via conda/mamba in the `genomics` environment. See `scripts/setup_environment.sh` for the full tool list and installation instructions. Run the setup script rather than installing tools manually — it verifies each installation and prints a version table.
 
-The annotation tools (gffread, eggnog-mapper) are installed separately by `scripts/setup_annotation.sh`, not by `setup_environment.sh`.
+gffread and eggnog-mapper are installed by `scripts/setup_environment.sh`; `scripts/setup_annotation.sh` only downloads the eggNOG database.
+
+Quarto (used to render the notebooks) is not part of the conda environment and must be installed separately. Version used: 1.9.38.
 
 | Tool | Version | Role |
 |---|---|---|
 | FastQC | 0.12.1 | Read quality assessment |
-| fastp | 1.3.0 | Adapter trimming |
+| fastp | 1.1.0 | Adapter trimming |
 | STAR | 2.7.11b | Splice-aware alignment |
-| Salmon | 1.10.3 | Transcript quantification |
+| Salmon | 2.1.1 | Transcript quantification |
 | MultiQC | 1.33 | QC aggregation |
 | seqtk | 1.5 | Read subsampling |
 | SeqKit | 2.13.0 | Installed for the KAUST course labs; not used by any pipeline step |
 | gffread | 0.12.9 | Protein sequence extraction from genome + GTF |
 | eggNOG-mapper | 2.1.13 | Functional annotation (GO/KEGG/orthology), database emapperdb-5.0.2 |
+| DIAMOND | 2.2.2 | Protein search engine used by eggNOG-mapper |
 | R | 4.4.3 | tximport, DESeq2, clusterProfiler |
 | tximport | 1.34.0 | Transcript → gene aggregation |
 | DESeq2 | 1.46.0 | Differential expression |
@@ -376,6 +385,7 @@ The annotation tools (gffread, eggnog-mapper) are installed separately by `scrip
 artemisia-annua-rna-seq-project/
 ├── run_pipeline.sh              # wrapper — entry point for the pipeline
 ├── config.sh                    # all paths, tools, and parameters
+├── environment.yml              # exact environment lockfile (conda export)
 ├── samples.csv                  # sample manifest
 ├── README.md
 ├── .gitignore

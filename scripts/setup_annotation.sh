@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # scripts/setup_annotation.sh
 # ==============================================================================
-# One-time setup for functional annotation: installs required tools and
-# downloads the eggNOG-mapper reference database.
+# One-time setup for functional annotation: downloads the eggNOG-mapper
+# reference database.
 #
-# WHY: gffread and eggnog-mapper are not yet installed in the genomics env,
-# and eggNOG-mapper requires its reference database (DIAMOND/HMMER data,
-# several GB) downloaded locally before it can annotate anything. Both are
-# one-time setup costs — this script is run once manually, not by
+# WHY: eggNOG-mapper requires its reference database (DIAMOND/HMMER data,
+# ~48 GB once unzipped) downloaded locally before it can annotate anything.
+# This is a one-time setup cost — this script is run once manually, not by
 # run_pipeline.sh, and not gated by should_run_step.
+#
+# PREREQUISITE: gffread and eggnog-mapper are installed by
+# scripts/setup_environment.sh, not by this script. Activate the 'genomics'
+# environment before running this (aria2c comes with eggnog-mapper).
 #
 # NOTE ON DIRECT DOWNLOAD (not using download_eggnog_data.py):
 # The eggnog-mapper package (bioconda, v2.1.13 as of this writing) ships
@@ -38,13 +41,17 @@
 
 set -euo pipefail
 
+if ! command -v aria2c &> /dev/null; then
+    echo "ERROR: aria2c not found."
+    echo "It is installed with eggnog-mapper by scripts/setup_environment.sh."
+    echo "Activate the 'genomics' environment first, then re-run this script."
+    exit 1
+fi
+
 EGGNOG_DB_DIR="$1"
 EGGNOG_DB_DIR="$(realpath "${EGGNOG_DB_DIR}")"
 
 mkdir -p "${EGGNOG_DB_DIR}"
-
-echo "Installing gffread and eggnog-mapper..."
-mamba install -c bioconda -c conda-forge gffread eggnog-mapper -y
 
 BASE_URL="http://eggnog5.embl.de/download/emapperdb-5.0.2"
 ARIA2_OPTS="-x16 -s16"
