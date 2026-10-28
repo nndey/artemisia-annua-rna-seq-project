@@ -208,6 +208,14 @@ notebooks/visualization.qmd       # plots and figures
 notebooks/enrichment_analysis.qmd # functional enrichment (clusterProfiler + eggNOG annotations)
 ```
 
+Rendering requires Quarto 1.9.38, installed system-wide (it is not part of the conda environment; see [Environment](#environment)). Activate `genomics` first so Quarto picks up the environment's R and its pinned packages:
+
+```bash
+conda activate genomics
+quarto check                          # "Checking R installation" should point inside the genomics env
+quarto render notebooks/deseq2.qmd    # repeat for the other notebooks
+```
+
 ---
 
 ## Outputs
@@ -358,10 +366,11 @@ All tools are managed via conda/mamba in the `genomics` environment. See `script
 
 gffread and eggnog-mapper are installed by `scripts/setup_environment.sh`; `scripts/setup_annotation.sh` only downloads the eggNOG database.
 
-Quarto (used to render the notebooks) is not part of the conda environment and must be installed separately. Version used: 1.9.38.
+**Not managed by conda:** Quarto 1.9.38 (system-wide install from <https://quarto.org/docs/download/>) is used to render the `.qmd` notebooks. It is deliberately left out of `environment.yml` so there is a single Quarto on the system rather than a second copy inside the environment. Quarto locates R through `PATH`, so always activate `genomics` before rendering (see [step 5](#5-run-downstream-analysis)).
 
 | Tool | Version | Role |
 |---|---|---|
+| Quarto | 1.9.38 | Notebook rendering (system install, not in conda) |
 | FastQC | 0.12.1 | Read quality assessment |
 | fastp | 1.1.0 | Adapter trimming |
 | STAR | 2.7.11b | Splice-aware alignment |
