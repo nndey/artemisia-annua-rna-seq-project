@@ -311,28 +311,39 @@ kegg_sig %>%
 ```{r}
 #| label: dotplots
 
+plot_dot <- function(r, title, file, n = 15) {
+  r@pvalueCutoff <- 0.05; r@qvalueCutoff <- 1   # plot only significant terms
+  n_show <- min(n, sum(r@result$p.adjust < 0.05))
+
+  p <- dotplot(r, showCategory = n_show,
+               label_format = 45,   # wrap at 45 chars instead of 30
+               font.size = 11) +
+    ggtitle(title) +
+    theme(axis.text.y = element_text(lineheight = 0.85))  # tighter wrapped lines
+
+  # scale height with the number of terms (~0.55 in per term + room for axis/title)
+  h <- max(5, 0.55 * n_show + 1.5)
+  ggsave(file, p, width = 10, height = h, dpi = 200)
+  p
+}
+
+# GO
 for (i in seq_len(nrow(ora))) {
   r <- ora$result[[i]]
-  if (is.null(r)) next
-  if (!any(r@result$p.adjust < 0.05)) next
-  r@pvalueCutoff <- 0.05; r@qvalueCutoff <- 1  # plot only significant terms
-  p <- dotplot(r, showCategory = 15) +
-    ggtitle(paste(ora$set[i], ora$ont[i]))
+  if (is.null(r) || !any(r@result$p.adjust < 0.05)) next
+  p <- plot_dot(r, paste(ora$set[i], ora$ont[i]),
+                file.path(paths$out_dir_fig,
+                          sprintf("dotplot_%s_%s.png", ora$set[i], ora$ont[i])))
   print(p)
-  ggsave(file.path(paths$out_dir_fig,
-                   sprintf("dotplot_%s_%s.png", ora$set[i], ora$ont[i])),
-         p, width = 8, height = 6, dpi = 200)
 }
 
 # KEGG
 for (s in names(kegg_ora)) {
   r <- kegg_ora[[s]]
   if (is.null(r) || !any(r@result$p.adjust < 0.05)) next
-  r@pvalueCutoff <- 0.05; r@qvalueCutoff <- 1
-  p <- dotplot(r, showCategory = 15) + ggtitle(paste(s, "KEGG"))
+  p <- plot_dot(r, paste(s, "KEGG"),
+                file.path(paths$out_dir_fig, sprintf("dotplot_%s_KEGG.png", s)))
   print(p)
-  ggsave(file.path(paths$out_dir_fig, sprintf("dotplot_%s_KEGG.png", s)),
-         p, width = 8, height = 6, dpi = 200)
 }
 ```
 
